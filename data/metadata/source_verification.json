@@ -1,0 +1,283 @@
+{
+  "source_verification_version": 2,
+  "purpose": "References and unresolved verification questions for registered and candidate Rwanda research sources. A public reference is not permission to use microdata.",
+  "sources": [
+    {
+      "source_id": "SOURCE-FINSCOPE-2024",
+      "dataset_id": "finscope_2024_rwanda_csv",
+      "candidate_dataset_name": null,
+      "source_title": "Rwanda - FinScope 2024, Financial Inclusion in Rwanda",
+      "source_organization": "Access to Finance Rwanda",
+      "release_version": "RWA-NISR-FINSCOPE-2024-v01",
+      "collection_period": "2024; exact fieldwork dates require confirmation against the authoritative technical documentation.",
+      "unit_of_analysis": "Rwandan adults / survey respondents; confirm the analysis unit and universe from the codebook.",
+      "target_population": "Rwanda population covered by the FinScope survey; confirm the official survey universe.",
+      "geographic_coverage": "Rwanda; geographic levels and identifiers require codebook and crosswalk review.",
+      "source_references": [
+        {
+          "label": "NISR microdata catalogue record",
+          "url": "https://microdata.statistics.gov.rw/index.php/catalog/120",
+          "supports": "Source identity, reference ID, producer, questionnaire/report availability, and microdata access workflow.",
+          "status": "verified",
+          "source_type": "catalogue",
+          "release_identifier": "RWA-NISR-FINSCOPE-2024-v01",
+          "exact_release_applicability": "verified",
+          "last_checked": "2026-10-14"
+        },
+        {
+          "label": "NISR FinScope 2024 publication page",
+          "url": "https://www.alpha.statistics.gov.rw/statistical-publications/business-establishment-finance-trade/finscope-survey-2024",
+          "supports": "Public publication landing page and report reference.",
+          "status": "provided_unverified",
+          "source_type": "report",
+          "release_identifier": null,
+          "exact_release_applicability": "missing",
+          "last_checked": null
+        },
+        {
+          "label": "FinScope Get Microdata workflow",
+          "url": "https://microdata.statistics.gov.rw/index.php/catalog/120/get_microdata",
+          "supports": "The catalogue links to a separate Get Microdata flow and displays login/register; request-specific requirements and project permission were not established.",
+          "status": "provided_unverified",
+          "source_type": "microdata",
+          "release_identifier": "RWA-NISR-FINSCOPE-2024-v01",
+          "exact_release_applicability": "provided_unverified",
+          "last_checked": "2026-10-14"
+        },
+        {
+          "label": "NISR Microdata Release Policy link",
+          "url": "https://statistics.gov.rw/publications/microdata-release-policy",
+          "supports": "The catalogue links to this policy URL; it returned HTTP 404 when checked, so no policy terms were reviewed.",
+          "status": "missing",
+          "source_type": "terms_of_use",
+          "release_identifier": null,
+          "exact_release_applicability": "missing",
+          "last_checked": "2026-10-14"
+        }
+      ],
+      "last_checked": "2026-10-14",
+      "access_method": "Catalogue page links to Get Microdata and displays Login/Register. The linked request flow content was not accessible to this review; exact requirements are unknown.",
+      "documentation_records": [],
+      "access_checklist": [
+        {"check_id":"official_access_procedure","label":"Official access procedure identified","status":"provided_unverified","source_status_field":"source_reference_status","evidence_needed":"Confirm the Get Microdata route and responsible access authority.","responsible_action":"Research lead","next_action":"Open the official Get Microdata workflow and document each required step; do not submit an application without owner approval.","evidence_references":["https://microdata.statistics.gov.rw/index.php/catalog/120/get_microdata"]},
+        {"check_id":"request_requirements","label":"Access request requirements documented","status":"missing","evidence_needed":"Current registration, application, identity, purpose, and review requirements from the official access workflow.","responsible_action":"Research lead","next_action":"Obtain the current process requirements from NISR/AFR and record the official instructions.","evidence_references":[]},
+        {"check_id":"release_confirmed","label":"Exact release identifier confirmed for the local dataset","status":"provided_unverified","source_status_field":"source_information_status","evidence_needed":"Evidence that any acquired file is the catalogue release RWA-NISR-FINSCOPE-2024-v01.","responsible_action":"Data custodian","next_action":"Match release documentation and file provenance; no local file is currently present.","evidence_references":["https://microdata.statistics.gov.rw/index.php/catalog/120"]},
+        {"check_id":"permission_obtained","label":"Permission or license obtained and reviewed","status":"missing","evidence_needed":"Written project-specific data access authorization or license with reviewer and date.","responsible_action":"Project owner / data custodian","next_action":"Request permission through the official process and record its scope; do not infer it from public access.","evidence_references":["EVID-DATASET-FINSCOPE-AUTHORIZATION","EVID-DATASET-FINSCOPE-LICENSE"]},
+        {"check_id":"permitted_use","label":"Permitted-use restrictions recorded","status":"missing","evidence_needed":"Terms for processing, storage, attribution, sharing, and publication.","responsible_action":"Project owner / legal reviewer","next_action":"Review the agreement or license and record restrictions separately from analytical approval.","evidence_references":["EVID-DATASET-FINSCOPE-LICENSE"]},
+        {"check_id":"questionnaire_reviewed","label":"Exact-release questionnaire obtained and reviewed","status":"missing","evidence_needed":"Questionnaire tied to the exact release and review notes for the selected construct/universe.","responsible_action":"Domain reviewer","next_action":"Obtain and review the release-matched questionnaire through an approved channel.","evidence_references":["EVID-DATASET-FINSCOPE-QUESTIONNAIRE"]},
+        {"check_id":"codebook_reviewed","label":"Exact-release codebook or variable dictionary obtained and reviewed","status":"missing","evidence_needed":"Release-matched codebook with variable labels, codes, universes, and nonresponse definitions.","responsible_action":"Data analyst + independent reviewer","next_action":"Obtain and independently review the exact-release codebook; map semantics, not guessed names.","evidence_references":["EVID-DATASET-FINSCOPE-CODEBOOK"]},
+        {"check_id":"methodology_reviewed","label":"Methodology and sampling documentation obtained and reviewed","status":"missing","evidence_needed":"Official design, weights, strata, clusters, variance and geographic coverage documentation.","responsible_action":"Survey statistician","next_action":"Obtain technical/methodology documentation and document design-based estimation requirements.","evidence_references":["EVID-DATASET-FINSCOPE-SURVEY"]},
+        {"check_id":"schema_documented","label":"Expected schema documented","status":"missing","evidence_needed":"Expected variable schema extracted from reviewed exact-release documentation.","responsible_action":"Data analyst + reviewer","next_action":"Record schema expectations and validate any authorized local file without exposing rows.","evidence_references":["EVID-DATASET-FINSCOPE-SCHEMA"]},
+        {"check_id":"quality_defined","label":"Data-quality requirements defined and reviewed","status":"missing","evidence_needed":"Indicator-specific aggregate validation criteria and reviewer acceptance.","responsible_action":"Data quality reviewer","next_action":"Define checks only after documentation and authorized intake; record acceptance without raw records.","evidence_references":["EVID-DATASET-FINSCOPE-QUALITY"]},
+        {"check_id":"indicator_verified","label":"Indicator definition and mappings independently verified","status":"missing","evidence_needed":"Approved FI-ACCESS-001 definition and verified exact-release variable mapping records.","responsible_action":"Domain reviewer + independent codebook reviewer","next_action":"Resolve every definition-review field and mapping against the authorized documentation.","evidence_references":["EVID-IND-FI-ACCESS-001-MAPPING","EVID-IND-FI-ACCESS-001-METHOD"]},
+        {"check_id":"analysis_approved","label":"Analytical eligibility approved","status":"missing","source_status_field":"analysis_approval_status","evidence_needed":"Separate reviewer decision after access, provenance, documentation, quality, mapping, and survey-design gates pass.","responsible_action":"Research governance reviewer","next_action":"Record dataset-specific analytical approval only after all prerequisite evidence is verified.","evidence_references":[]},
+        {"check_id":"publication_reviewed","label":"Publication and disclosure requirements reviewed separately","status":"missing","source_status_field":"publication_approval_status","evidence_needed":"Output-specific license, disclosure, cell-size, attribution, and publication decision.","responsible_action":"Disclosure/publication reviewer","next_action":"Complete a separate release review after analysis; analytical access does not imply publication permission.","evidence_references":["EVID-PUBLICATION-DISCLOSURE-001"]}
+      ],
+      "source_reference_status": "provided_unverified",
+      "documentation_references": [
+        "https://microdata.statistics.gov.rw/index.php/catalog/120"
+      ],
+      "documentation_status": "provided_unverified",
+      "documentation_review_status": "missing",
+      "survey_methodology_references": [
+        "https://microdata.statistics.gov.rw/index.php/catalog/120"
+      ],
+      "sampling_weighting_status": "Not verified from the local project; obtain and review technical documentation before estimation.",
+      "access_requirements": "Catalogue displays a Get Microdata workflow and Login/Register links. Request-specific requirements, project permission, and terms remain unverified.",
+      "permission_status": "unverified",
+      "access_authorization_status": "missing",
+      "license_status": "unverified",
+      "geographic_references": [],
+      "verification_status": "provided_unverified",
+      "source_information_status": "provided_unverified",
+      "analysis_approval_status": "missing",
+      "publication_approval_status": "missing",
+      "unresolved_questions": [
+        "Does the local CSV correspond to the official release and version?",
+        "What are the exact codebook variables, response codes, survey weights, strata, and clusters?",
+        "What analysis and redistribution permissions apply to the local file?"
+      ],
+      "next_actions": [
+        "Obtain the authoritative codebook and technical documentation through the approved access process.",
+        "Match the local file identity and integrity to the documented release without exposing records.",
+        "Record a separate authorization and publication decision."
+      ],
+      "manual_verification_required": true
+    },
+    {
+      "source_id": "SOURCE-LOCAL-CSV",
+      "dataset_id": "local_dataset_csv",
+      "candidate_dataset_name": null,
+      "source_title": null,
+      "source_organization": null,
+      "release_version": null,
+      "collection_period": null,
+      "unit_of_analysis": null,
+      "target_population": null,
+      "geographic_coverage": null,
+      "source_references": [],
+      "source_reference_status": "missing",
+      "documentation_references": [],
+      "documentation_status": "missing",
+      "documentation_review_status": "missing",
+      "survey_methodology_references": [],
+      "sampling_weighting_status": "missing",
+      "access_requirements": "Unknown.",
+      "permission_status": "unverified",
+      "access_authorization_status": "missing",
+      "license_status": "unverified",
+      "geographic_references": [],
+      "verification_status": "missing",
+      "source_information_status": "missing",
+      "analysis_approval_status": "missing",
+      "publication_approval_status": "missing",
+      "unresolved_questions": [
+        "Who owns or issued the local CSV?",
+        "What release, population, period, documentation, and permission conditions apply?"
+      ],
+      "next_actions": [
+        "Do not use the file for analysis until provenance and permission are documented.",
+        "Obtain a codebook or data dictionary and any survey-design documentation."
+      ],
+      "manual_verification_required": true
+    },
+    {
+      "source_id": "SOURCE-LOCAL-STATA",
+      "dataset_id": "local_dataset_stata",
+      "candidate_dataset_name": null,
+      "source_title": null,
+      "source_organization": null,
+      "release_version": null,
+      "collection_period": null,
+      "unit_of_analysis": null,
+      "target_population": null,
+      "geographic_coverage": null,
+      "source_references": [],
+      "source_reference_status": "missing",
+      "documentation_references": [],
+      "documentation_status": "missing",
+      "documentation_review_status": "missing",
+      "survey_methodology_references": [],
+      "sampling_weighting_status": "missing",
+      "access_requirements": "Unknown.",
+      "permission_status": "unverified",
+      "access_authorization_status": "missing",
+      "license_status": "unverified",
+      "geographic_references": [],
+      "verification_status": "missing",
+      "source_information_status": "missing",
+      "analysis_approval_status": "missing",
+      "publication_approval_status": "missing",
+      "unresolved_questions": [
+        "Who owns or issued the local Stata file?",
+        "What release, population, period, documentation, and permission conditions apply?"
+      ],
+      "next_actions": [
+        "Do not use the file for analysis until provenance and permission are documented.",
+        "Obtain a codebook or data dictionary and any survey-design documentation."
+      ],
+      "manual_verification_required": true
+    },
+    {
+      "source_id": "SOURCE-EICV7-CANDIDATE",
+      "dataset_id": null,
+      "candidate_dataset_name": "EICV7",
+      "source_title": "Integrated Household Living Conditions Survey 7 (EICV7)",
+      "source_organization": "National Institute of Statistics of Rwanda",
+      "release_version": "EICV7 2023/24",
+      "collection_period": "October 2023 - October 2024",
+      "unit_of_analysis": "Households and individuals; confirm the unit for each intended indicator from the methodology and codebook.",
+      "target_population": "Rwanda household living-conditions survey population; confirm survey universe from methodology documentation.",
+      "geographic_coverage": "Rwanda; district/province comparability and identifiers require review.",
+      "source_references": [
+        {
+          "label": "NISR EICV7 survey page",
+          "url": "https://statistics.gov.rw/data-sources/surveys/EICV/integrated-household-living-conditions-survey-7-eicv-7",
+          "supports": "Survey identity, collection period, methodology link, and official publication list.",
+          "status": "verified",
+          "source_type": "catalogue",
+          "release_identifier": "EICV7 2023/24",
+          "exact_release_applicability": "verified",
+          "last_checked": "2026-10-14"
+        },
+        {
+          "label": "NISR EICV7 main indicators report page",
+          "url": "https://gis.statistics.gov.rw/statistical-publications/poverty-and-social-protection/eicv7-main-indicators-report-202324",
+          "supports": "Official main-indicators publication and downloadable report/table references.",
+          "status": "provided_unverified",
+          "source_type": "report",
+          "release_identifier": "EICV7 2023/24",
+          "exact_release_applicability": "provided_unverified",
+          "last_checked": null
+        }
+      ],
+      "last_checked": "2026-10-14",
+      "source_reference_status": "provided_unverified",
+      "documentation_references": [
+        "https://statistics.gov.rw/data-sources/surveys/EICV/integrated-household-living-conditions-survey-7-eicv-7",
+        "https://gis.statistics.gov.rw/statistical-publications/poverty-and-social-protection/eicv7-main-indicators-report-202324"
+      ],
+      "documentation_status": "provided_unverified",
+      "documentation_review_status": "missing",
+      "survey_methodology_references": [
+        "https://statistics.gov.rw/data-sources/surveys/EICV/integrated-household-living-conditions-survey-7-eicv-7"
+      ],
+      "sampling_weighting_status": "Not verified for a local microdata file; obtain the methodological notes and weight documentation.",
+      "access_requirements": "Public publications are discoverable; microdata access and analysis permission are not established by these pages.",
+      "permission_status": "unverified",
+      "access_authorization_status": "missing",
+      "license_status": "unverified",
+      "geographic_references": [],
+      "verification_status": "provided_unverified",
+      "source_information_status": "provided_unverified",
+      "analysis_approval_status": "missing",
+      "publication_approval_status": "missing",
+      "unresolved_questions": [
+        "Which authorized microdata release and codebook are available for the intended analysis?",
+        "What poverty definition, welfare aggregate, weights, and survey-design rules apply to a candidate measure?",
+        "Are the published district materials suitable for the intended geographic comparison?"
+      ],
+      "next_actions": [
+        "Obtain authorized microdata and methodology documentation through the responsible channel.",
+        "Keep the existing poverty indicator blocked until the official definition and mappings are reviewed."
+      ],
+      "manual_verification_required": true
+    },
+    {
+      "source_id": "SOURCE-RPHC-CANDIDATE",
+      "dataset_id": null,
+      "candidate_dataset_name": "RPHC",
+      "source_title": null,
+      "source_organization": null,
+      "release_version": null,
+      "collection_period": null,
+      "unit_of_analysis": null,
+      "target_population": null,
+      "geographic_coverage": null,
+      "source_references": [],
+      "source_reference_status": "missing",
+      "documentation_references": [],
+      "documentation_status": "missing",
+      "documentation_review_status": "missing",
+      "survey_methodology_references": [],
+      "sampling_weighting_status": "missing",
+      "access_requirements": "Unknown.",
+      "permission_status": "unverified",
+      "access_authorization_status": "missing",
+      "license_status": "unverified",
+      "geographic_references": [],
+      "verification_status": "missing",
+      "source_information_status": "missing",
+      "analysis_approval_status": "missing",
+      "publication_approval_status": "missing",
+      "unresolved_questions": [
+        "Which RPHC release is intended and what official documentation supports it?",
+        "Is it appropriate for the proposed poverty indicator and geographic use?"
+      ],
+      "next_actions": [
+        "Identify the exact official RPHC source and obtain its methodology, codebook, and access terms before use."
+      ],
+      "manual_verification_required": true
+    }
+  ]
+}

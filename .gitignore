@@ -1,0 +1,37 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Generated outputs and model artifacts
+artifacts/
+outputs/
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.model
+
+# Keep common local/editor noise out of version control
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+# Large datasets and videos
+data/mine/*.mp4
+data/mine/*.csv

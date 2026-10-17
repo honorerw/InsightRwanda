@@ -1,0 +1,15 @@
+[theme]
+base = "light"
+primaryColor = "#1769AA"
+backgroundColor = "#F7F9FC"
+secondaryBackgroundColor = "#EAF0F6"
+textColor = "#102A43"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Keep the standard Streamlit toolbar and its built-in controls available.
+toolbarMode = "auto"
+showSidebarNavigation = true

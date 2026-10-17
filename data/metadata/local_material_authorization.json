@@ -1,0 +1,16 @@
+{
+  "authorization_version": 1,
+  "status": "authorized_for_analysis",
+  "scope": "All files supplied under ../data/mine/",
+  "granted_by": "Project owner confirmation in the current workspace session",
+  "permitted_processing_purpose": "InsightRwanda hackathon analysis and local dashboard use",
+  "external_sources_allowed": false,
+  "raw_rows_may_be_displayed": false,
+  "publication_status": "requires_separate_output_review",
+  "recorded_date": "2026-10-15",
+  "notes": [
+    "The authorization applies to the supplied local material only.",
+    "File presence and user authorization do not define survey variables or statistical methods.",
+    "Publication and disclosure review remain separate from local analytical use."
+  ]
+}
