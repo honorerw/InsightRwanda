@@ -423,7 +423,7 @@ def render_overview(df: pd.DataFrame) -> None:
             fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
             fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5")
             fig.update_yaxes(autorange="reversed")
-            st.plotly_chart(chart_theme(fig, 328), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(chart_theme(fig, 328), width="stretch", config={"displayModeBar": False})
             st.markdown('</div>', unsafe_allow_html=True)
         with right:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
@@ -432,7 +432,7 @@ def render_overview(df: pd.DataFrame) -> None:
             fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
             resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
             fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Georgia"))
-            st.plotly_chart(chart_theme(fig, 228), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(chart_theme(fig, 228), width="stretch", config={"displayModeBar": False})
             st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -520,7 +520,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         fig = go.Figure(go.Bar(x=values, y=names, orientation="h", marker_color=colors, text=[f"{v:.1f}%" for v in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
         fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(chart_theme(fig, 350), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, 350), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
     with right:
         selected = st.selectbox("Inspect indicator", list(INDICATORS), format_func=lambda x: f"{x} · {INDICATORS[x].title}", key="indicator_detail")
@@ -544,7 +544,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         }
         for definition in INDICATORS.values()
     ])
-    st.dataframe(registry, hide_index=True, use_container_width=True, height=315)
+    st.dataframe(registry, hide_index=True, width="stretch", height=315)
     st.markdown(f'<div class="footer-note">Source profile: {profile.source_variables:,} variables in the original Stata file · {profile.rows:,} records loaded · release and population period are not documented in the supplied materials.</div>', unsafe_allow_html=True)
 
 
@@ -562,7 +562,7 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         ["Survey methodology", "No sampling, strata, PSU, calibration or variance-estimation documentation is available in the workspace."],
         ["Authorization", "The file is present and inspected, but no authorization record for public poverty reporting was supplied."],
     ], columns=["Dependency", "Evidence status"])
-    st.dataframe(blockers, hide_index=True, use_container_width=True)
+    st.dataframe(blockers, hide_index=True, width="stretch")
 
     section_head("What is available as non-poverty context", "These are genuine estimates, clearly labelled as financial stress indicators")
     view = filter_bar(df, "poverty_context")
@@ -601,7 +601,7 @@ def render_regional(df: pd.DataFrame) -> None:
         fig = go.Figure()
         fig.add_trace(go.Bar(y=table["group"], x=table["value"] * 100, orientation="h", marker_color="#3155d4", name="Active access", text=[f"{v:.0f}%" for v in table["value"] * 100], textposition="outside", hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
-        st.plotly_chart(chart_theme(fig, 340), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, 340), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
     with r:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
@@ -611,7 +611,7 @@ def render_regional(df: pd.DataFrame) -> None:
             fig.add_trace(go.Bar(x=table["group"], y=table[col] * 100, name=name, marker_color=color, hovertemplate=f"%{{x}} · {name}: %{{y:.1f}}%<extra></extra>"))
         fig.update_layout(barmode="group")
         fig.update_yaxes(range=[0, 108], ticksuffix="%")
-        st.plotly_chart(chart_theme(fig, 340, True), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, 340, True), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("District explorer", "Sorted by active formal access · filter the geography above to zoom in")
@@ -623,7 +623,7 @@ def render_regional(df: pd.DataFrame) -> None:
         display_table = district_table.copy()
         display_table["Active access"] = display_table["active_access"].map(pct)
         display_table["Emergency fund"] = display_table["emergency_fund"].map(pct)
-        st.dataframe(display_table[["group", "Active access", "active_n", "Emergency fund", "emergency_n"]].rename(columns={"group": "District", "active_n": "Access n", "emergency_n": "Emergency n"}), hide_index=True, use_container_width=True, height=300)
+        st.dataframe(display_table[["group", "Active access", "active_n", "Emergency fund", "emergency_n"]].rename(columns={"group": "District", "active_n": "Access n", "emergency_n": "Emergency n"}), hide_index=True, width="stretch", height=300)
     with dright:
         best = district_table.iloc[0] if len(district_table) else None
         worst = district_table.iloc[-1] if len(district_table) else None
@@ -671,7 +671,7 @@ def render_resilience(df: pd.DataFrame) -> None:
         setting = weighted_group(view.assign(priority=view["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
         fig = go.Figure(go.Bar(x=setting["group"], y=setting["value"] * 100, marker_color=["#d95362" if x == "Rural" else "#f0a1ad" for x in setting["group"]], text=[f"{v:.0f}%" for v in setting["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
         fig.update_yaxes(range=[0, max(30, float(setting["value"].max() * 100 + 10))], ticksuffix="%")
-        st.plotly_chart(chart_theme(fig, 245), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, 245), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("What action could look like", "Translate signals into a practical programme conversation")
@@ -726,7 +726,7 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
         st.markdown(f'<div class="section-title">{label} by {dimension.replace("_", " ")}</div><div class="section-note">Weighted share of respondents</div>', unsafe_allow_html=True)
         fig = go.Figure(go.Bar(y=grouped["group"], x=grouped["value"] * 100, orientation="h", marker_color="#3155d4", text=[f"{v:.0f}%" for v in grouped["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
-        st.plotly_chart(chart_theme(fig, max(260, min(510, 35 * len(grouped) + 90))), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, max(260, min(510, 35 * len(grouped) + 90))), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Aggregate evidence", f"Household-level records are withheld by default · {len(view):,} records in scope")
@@ -734,7 +734,7 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     if not aggregate.empty:
         aggregate["estimate"] = aggregate["estimate"].map(lambda x: pct(x, 1))
         aggregate = aggregate.rename(columns={"province": "Province", "district": "District", "setting": "Setting", "sex": "Respondent", "records": "Records", "weight_sum": "Weight sum", "estimate": label})
-    st.dataframe(aggregate, hide_index=True, use_container_width=True, height=340)
+    st.dataframe(aggregate, hide_index=True, width="stretch", height=340)
     st.markdown('<div class="callout"><strong>Privacy and publication control.</strong><br>Household-level records and raw CSV export are disabled because no authorization or disclosure/publication approval record was supplied. The table above is an aggregate analytical view only.</div>', unsafe_allow_html=True)
     aggregate_csv = aggregate.to_csv(index=False).encode("utf-8") if not aggregate.empty else b""
     st.download_button("Download aggregate summary (approval required)", aggregate_csv, file_name="insightrwanda_aggregate_summary.csv", mime="text/csv", type="secondary", disabled=True if profile is None else profile.publication_status != "Approved")
@@ -759,7 +759,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
         {"Status": check.status, "Category": check.category, "Check": check.check_id, "Finding": check.finding}
         for check in checks
     ])
-    st.dataframe(quality_table, hide_index=True, use_container_width=True, height=355)
+    st.dataframe(quality_table, hide_index=True, width="stretch", height=355)
 
     section_head("Core-variable missingness", "Missing responses are excluded from each indicator denominator; no imputation is performed")
     missing_cols = ["qf4_05", "e9b", "e9c", "e7", "c14_5", "b2", "a1", "a2"]
@@ -769,7 +769,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
         fig = go.Figure(go.Bar(x=[value for _, value in missing_values], y=[column for column, _ in missing_values], orientation="h", marker_color="#de7c3f", text=[f"{value:.1f}%" for _, value in missing_values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}% missing<extra></extra>"))
         fig.update_xaxes(range=[0, max(10, max((value for _, value in missing_values), default=0) + 10)], ticksuffix="%")
         fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(chart_theme(fig, 300), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(chart_theme(fig, 300), width="stretch", config={"displayModeBar": False})
     with right:
         st.markdown(f'<div class="callout"><strong>Scope.</strong><br><br>{profile.source_variables:,} source variables were inventoried. This dashboard loads {profile.analytical_variables:,} documented analytical variables, plus derived labels and indicators.<br><br><strong>Important.</strong><br><br>A clean load, unique key and valid codes do not prove that the survey is representative or that an official statistic can be published.</div>', unsafe_allow_html=True)
 
@@ -793,7 +793,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
             ["Release / period", profile.source_release], ["Metadata", profile.metadata_status], ["Analysis", profile.analysis_status],
             ["Authorization", profile.authorization_status], ["Publication", profile.publication_status],
         ]
-        st.dataframe(pd.DataFrame(source_rows, columns=["Field", "Status / value"]), hide_index=True, use_container_width=True, height=405)
+        st.dataframe(pd.DataFrame(source_rows, columns=["Field", "Status / value"]), hide_index=True, width="stretch", height=405)
         st.markdown('</div>', unsafe_allow_html=True)
     with right:
         st.markdown('<div class="chart-card"><div class="eyebrow">Evidence chain</div><div class="section-title" style="font-size:1.25rem">Five steps, one audit trail</div>', unsafe_allow_html=True)
@@ -808,12 +808,12 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Available source materials", "What was actually found in the workspace")
-    st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded source variable/value labels"]}), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded source variable/value labels"]}), hide_index=True, width="stretch")
     st.markdown('<div class="callout"><strong>Governance boundary.</strong><br>The application distinguishes file existence, metadata inspection, permitted analysis, validation and public publication. The supplied workspace contains no authorization or publication approval record, so the app is suitable for internal analysis and demonstration, not an approved public statistical release.</div>', unsafe_allow_html=True)
 
     section_head("Indicator methodology", "Verified source mapping for the current financial-inclusion slice")
     method_rows = [{"ID": d.indicator_id, "Definition": d.definition, "Valid responses": d.valid_response_rule, "Calculation": d.method, "Limitations": " ".join(d.limitations)} for d in INDICATORS.values()]
-    st.dataframe(pd.DataFrame(method_rows), hide_index=True, use_container_width=True, height=320)
+    st.dataframe(pd.DataFrame(method_rows), hide_index=True, width="stretch", height=320)
     st.markdown(f'<div class="footer-note">Quality checks executed: {len(checks)} · source profile is cached from the supplied file · original research materials remain unchanged.</div>', unsafe_allow_html=True)
 
 
@@ -849,7 +849,7 @@ def render_about(df: pd.DataFrame) -> None:
         ["Usability + design", "Custom navigation, responsive layout, plain-language narrative and downloadable evidence."],
         ["Tangible impact", "Surfaces where to strengthen buffers, assisted digital access and shock-responsive finance."],
     ], columns=["Criterion", "Prototype response"])
-    st.dataframe(criteria, hide_index=True, use_container_width=True)
+    st.dataframe(criteria, hide_index=True, width="stretch")
     st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
 
 
