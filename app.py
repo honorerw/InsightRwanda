@@ -23,7 +23,7 @@ APP_DIR = Path(__file__).resolve().parent
 DATA_PATH = APP_DIR / "data" / "dataset.dta"
 
 st.set_page_config(
-    page_title="Imari Rwanda | Financial Inclusion Observatory",
+    page_title="InsightRwanda | Research Analytics",
     page_icon="◒",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -36,119 +36,129 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-
 :root {
-    --ink: #14221e;
-    --muted: #687771;
-    --line: #dce7e1;
-    --paper: #f6f9f7;
+    --ink: #17213d;
+    --muted: #66718b;
+    --line: #dce3ef;
+    --paper: #f5f7fb;
     --card: #ffffff;
-    --green: #0b7658;
-    --green-dark: #07513e;
-    --mint: #d8f2e7;
-    --orange: #d4793d;
-    --yellow: #f2c94c;
-    --rose: #d65e61;
+    --green: #3155d4;
+    --green-dark: #172554;
+    --mint: #e8edff;
+    --orange: #de7c3f;
+    --yellow: #e5ae2f;
+    --rose: #d95362;
 }
 
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; color: var(--ink); }
+*, *::before, *::after { box-sizing: border-box; }
+html, body, [class*="css"] { font-family: 'Lato', 'Arial', sans-serif; color: var(--ink); }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 .stApp { background: var(--paper); }
 header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
 [data-testid="stAppViewContainer"] { background: var(--paper); }
-.block-container { max-width: 1450px; padding: 1.1rem 3.2rem 4rem; }
+.block-container { max-width: 1480px; padding: 1.35rem 3.4rem 4.5rem; }
+.main .block-container { animation: rise-in .35s ease-out both; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-[data-testid="stSidebar"] { background: #102d25; border-right: 1px solid #214b3e; min-width: 268px; }
+[data-testid="stSidebar"] { background: linear-gradient(180deg, #123c36 0%, #1d5149 100%); border-right: 1px solid #2c6258; min-width: 276px; }
 [data-testid="stSidebar"] > div:first-child { padding: 1.1rem .95rem 1.4rem; }
-[data-testid="stSidebar"] * { color: #e6f4ed; }
-[data-testid="stSidebar"] hr { border-color: #2b5548; margin: 1rem 0; }
+[data-testid="stSidebar"] * { color: #effaf6; }
+[data-testid="stSidebar"] hr { border-color: #397368; margin: 1rem 0; }
 .side-brand { display:flex; align-items:center; gap:.65rem; padding:.25rem .35rem .85rem; }
-.side-mark { width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:10px; background:#65c69b; color:#0c382b; font-family:'Manrope',sans-serif; font-weight:800; }
-.side-name { font-family:'Manrope',sans-serif; font-size:.98rem; font-weight:800; letter-spacing:-.025em; }
-.side-caption { color:#99c9b5 !important; font-size:.67rem; margin-top:.12rem; }
-.side-label { color:#8cbca8 !important; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:.11em; font-size:.61rem; font-weight:500; margin:.2rem .35rem .45rem; }
-[data-testid="stSidebar"] .stRadio label { border-radius:9px; padding:.56rem .62rem; color:#b7d4c7; font-size:.8rem; font-weight:600; }
-[data-testid="stSidebar"] .stRadio label:hover { background:#1a4437; color:#fff; }
-[data-testid="stSidebar"] .stRadio label:has(input:checked) { background:#d8f2e7; color:#0a5944; }
+.side-mark { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:11px; background:#9ce0c6; color:#123c36; font-family:Georgia, 'Times New Roman', serif; font-weight:800; box-shadow:0 8px 22px rgba(0,0,0,.16); }
+.side-name { font-family:Georgia, 'Times New Roman', serif; font-size:1rem; font-weight:700; letter-spacing:-.025em; }
+[data-testid="stSidebar"] .side-caption { color:#b3d8cc !important; font-size:.67rem; margin-top:.12rem; }
+[data-testid="stSidebar"] .side-label { color:#9bc5b8 !important; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.11em; font-size:.61rem; font-weight:500; margin:.2rem .35rem .45rem; }
+[data-testid="stSidebar"] .stRadio, [data-testid="stSidebar"] .stRadio > div, [data-testid="stSidebar"] .stRadio > div > div, [data-testid="stSidebar"] .stRadio [role="radiogroup"] { width:100% !important; max-width:none !important; }
+[data-testid="stSidebar"] .stRadio [role="radiogroup"] { display:flex !important; flex-direction:column !important; align-items:stretch !important; }
+[data-testid="stSidebar"] .stRadio label { display:flex !important; width:100% !important; max-width:none !important; align-self:stretch !important; position:relative; overflow:hidden; border:1px solid transparent; border-radius:10px; padding:.6rem .65rem; color:#c8e3da; font-size:.8rem; font-weight:600; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
+[data-testid="stSidebar"] .stRadio label:not(:has(input:checked)):hover { background:#286358; border-color:#4c8b7d; color:#fff; transform:translateX(4px); box-shadow:0 5px 14px rgba(0,0,0,.12); }
+[data-testid="stSidebar"] .stRadio label:not(:has(input:checked)):active { background:#9ce0c6; border-color:#bcebd5; color:#123c36; transform:translateX(2px) scale(.98); box-shadow:inset 0 2px 5px rgba(18,60,54,.18); }
+[data-testid="stSidebar"] .stRadio label:has(input:checked) { width:calc(100% + 1.9rem) !important; margin-left:-.95rem; background:#9ce0c6; border-color:#bcebd5; color:#123c36; box-shadow:0 5px 14px rgba(0,0,0,.1); }
 [data-testid="stSidebar"] .stRadio label > div:first-child { display:none; }
-.side-card { border:1px solid #2b5548; background:#17392f; border-radius:12px; padding:.75rem .8rem; margin-top:.45rem; }
-.side-card-title { font-size:.72rem; font-weight:700; color:#e6f4ed !important; }
-.side-card-copy { font-size:.67rem; line-height:1.45; color:#a6cbbc !important; margin-top:.28rem; }
-.side-status { display:flex; align-items:center; gap:.4rem; font-size:.67rem; color:#b7d4c7 !important; margin-top:.75rem; }
-.side-status-dot { width:7px; height:7px; border-radius:50%; background:#65c69b; box-shadow:0 0 0 4px rgba(101,198,155,.15); }
-.side-footer { color:#759f8d !important; font-size:.63rem; line-height:1.45; margin:.95rem .35rem 0; }
+.side-card { border:1px solid #397368; background:#205148; border-radius:12px; padding:.75rem .8rem; margin-top:.45rem; }
+.side-card-title { font-size:.72rem; font-weight:700; color:#effaf6 !important; }
+.side-card-copy { font-size:.67rem; line-height:1.45; color:#c0ded4 !important; margin-top:.28rem; }
+.side-status { display:flex; align-items:center; gap:.4rem; font-size:.67rem; color:#c8e3da !important; margin-top:.75rem; }
+.side-status-dot { width:7px; height:7px; border-radius:50%; background:#9ce0c6; box-shadow:0 0 0 4px rgba(156,224,198,.18); }
+.side-footer { color:#9bc5b8 !important; font-size:.63rem; line-height:1.45; margin:.95rem .35rem 0; }
 
-.app-header { display:flex; align-items:center; justify-content:space-between; padding: .25rem 0 1.15rem; border-bottom: 1px solid var(--line); margin-bottom: 1.1rem; }
+.app-header { display:flex; align-items:center; justify-content:space-between; padding: .15rem .1rem 1.15rem; border-bottom: 1px solid var(--line); margin-bottom: 1.55rem; }
 .brand { display:flex; align-items:center; gap:.75rem; }
-.brand-mark { width: 38px; height: 38px; border-radius: 12px; background: var(--green); color:white; display:flex; align-items:center; justify-content:center; font-family: 'Manrope', sans-serif; font-size: 1.2rem; font-weight:800; box-shadow: 0 6px 16px rgba(11,118,88,.16); }
-.brand-name { font-family:'Manrope',sans-serif; font-size:1.08rem; font-weight:800; letter-spacing:-.02em; }
+.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #5274e6, #172554); color:white; display:flex; align-items:center; justify-content:center; font-family:Georgia, 'Times New Roman', serif; font-size: 1.25rem; font-weight:800; box-shadow: 0 8px 20px rgba(49,85,212,.22); }
+.brand-name { font-family:Georgia, 'Times New Roman', serif; font-size:1.16rem; font-weight:700; letter-spacing:-.02em; }
 .brand-sub { color: var(--muted); font-size:.72rem; margin-top:.12rem; }
 .header-meta { display:flex; align-items:center; gap:.75rem; color:var(--muted); font-size:.77rem; }
-.live-pill { display:flex; align-items:center; gap:.38rem; border:1px solid #c7e6d8; color:var(--green-dark); background:#edf9f3; border-radius:999px; padding:.38rem .65rem; font-weight:600; }
-.live-dot { width:7px; height:7px; background:#16a06f; border-radius:50%; box-shadow:0 0 0 4px #d5f2e4; }
+.live-pill { display:flex; align-items:center; gap:.38rem; border:1px solid #cbd5ff; color:var(--green-dark); background:#f0f3ff; border-radius:999px; padding:.4rem .72rem; font-weight:700; box-shadow:0 3px 10px rgba(49,85,212,.06); }
+.live-dot { width:7px; height:7px; background:#5274e6; border-radius:50%; box-shadow:0 0 0 4px #dbe2ff; }
 
 .stRadio > div { gap: .3rem; }
 .stRadio [role="radiogroup"] { gap: .25rem; }
 .stRadio label { border-radius: 8px; padding: .43rem .75rem; color: var(--muted); font-size:.83rem; font-weight:600; transition:.15s ease; }
-.stRadio label:hover { background: #edf4f0; color: var(--ink); }
+.stRadio label:hover { background: #eef1fb; color: var(--ink); }
 .stRadio label:has(input:checked) { color: var(--green-dark); background: var(--mint); }
 .stRadio label > div:first-child { display:none; }
 
-.eyebrow { font-family:'DM Mono', monospace; font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
-.page-title { font-family:'Manrope',sans-serif; font-size:2.3rem; line-height:1.08; letter-spacing:-.055em; font-weight:800; margin:0; color:var(--ink); }
+.eyebrow { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
+.page-intro { padding: .15rem 0 .2rem; }
+.page-title { font-family:Georgia, 'Times New Roman', serif; font-size:2.55rem; line-height:1.08; letter-spacing:-.045em; font-weight:700; margin:0; color:var(--ink); }
 .page-lede { color:var(--muted); font-size:.98rem; line-height:1.55; max-width:720px; margin:.65rem 0 1.2rem; }
-.section-title { font-family:'Manrope',sans-serif; font-size:1.02rem; font-weight:800; letter-spacing:-.02em; margin:0; }
+.section-title { font-family:Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:700; letter-spacing:-.015em; margin:0; }
 .section-note { color:var(--muted); font-size:.77rem; margin:.25rem 0 .9rem; }
 .section-head { display:flex; justify-content:space-between; align-items:flex-end; margin: 1.55rem 0 .75rem; }
-.mono { font-family:'DM Mono',monospace; }
+.mono { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; }
 
-.filter-shell { background:#edf5f0; border:1px solid #d7e8df; border-radius:14px; padding:.8rem 1rem .15rem; margin:.4rem 0 1.1rem; }
-.filter-label { font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--green-dark); font-size:.64rem; margin-bottom:.25rem; }
+.filter-shell { background:linear-gradient(135deg, #f0f3ff, #e9edfb); border:1px solid #d5dcf2; border-radius:15px; padding:.85rem 1rem .18rem; margin:.55rem 0 1.25rem; box-shadow:0 5px 18px rgba(37,56,110,.05); }
+.filter-label { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--green-dark); font-size:.64rem; margin-bottom:.25rem; }
 [data-testid="stSelectbox"] label, [data-testid="stSlider"] label { color:var(--muted); font-size:.73rem; font-weight:600; }
-[data-testid="stSelectbox"] > div > div { background:#fff; border-color:#d5e4dc; border-radius:9px; min-height:38px; }
+[data-testid="stSelectbox"] > div > div { background:#fff; border-color:#d5dcef; border-radius:10px; min-height:40px; box-shadow:0 2px 8px rgba(37,56,110,.045); }
 
-.metric-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:1.05rem 1.1rem 1rem; min-height:132px; box-shadow:0 4px 16px rgba(18,57,40,.025); }
+.metric-card { background:var(--card); border:1px solid var(--line); border-radius:17px; padding:1.1rem 1.12rem 1rem; min-height:136px; box-shadow:0 7px 22px rgba(37,56,110,.055); transition:transform .18s ease, box-shadow .18s ease; }
+.metric-card:hover { transform:translateY(-2px); box-shadow:0 12px 28px rgba(37,56,110,.11); }
 .metric-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.55rem; }
 .metric-label { color:var(--muted); font-size:.76rem; font-weight:600; line-height:1.25; }
 .metric-icon { width:29px; height:29px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:.92rem; }
-.metric-value { font-family:'Manrope',sans-serif; font-size:1.72rem; letter-spacing:-.05em; font-weight:800; }
+.metric-value { font-family:Georgia, 'Times New Roman', serif; font-size:1.84rem; letter-spacing:-.04em; font-weight:700; font-variant-numeric:tabular-nums; }
 .metric-foot { color:var(--muted); font-size:.7rem; margin-top:.25rem; line-height:1.25; }
-.metric-card.green .metric-icon { background:#e1f6ed; color:var(--green); }
+.metric-card.green .metric-icon { background:#e8edff; color:var(--green); }
 .metric-card.green .metric-value { color:var(--green-dark); }
-.metric-card.orange .metric-icon { background:#fff0e3; color:var(--orange); }
+.metric-card.orange .metric-icon { background:#fff0e5; color:var(--orange); }
 .metric-card.orange .metric-value { color:#a95724; }
-.metric-card.yellow .metric-icon { background:#fff7d9; color:#9d7a0d; }
+.metric-card.yellow .metric-icon { background:#fff6d8; color:#9d7a0d; }
 .metric-card.yellow .metric-value { color:#8c6c06; }
-.metric-card.rose .metric-icon { background:#ffeaeb; color:var(--rose); }
+.metric-card.rose .metric-icon { background:#ffeaed; color:var(--rose); }
 .metric-card.rose .metric-value { color:#ac4044; }
 
-.chart-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:1rem 1.05rem .75rem; }
+.chart-card { background:var(--card); border:1px solid var(--line); border-radius:17px; padding:1.05rem 1.08rem .78rem; box-shadow:0 6px 22px rgba(37,56,110,.045); }
 .chart-card .stPlotlyChart { margin-top:.35rem; }
 .insight-card { border-radius:16px; padding:1.05rem 1.15rem; background:var(--green-dark); color:white; min-height:128px; }
-.insight-kicker { color:#9cdbc4; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:.1em; font-size:.63rem; }
-.insight-text { font-family:'Manrope',sans-serif; font-size:1rem; font-weight:700; line-height:1.33; margin-top:.45rem; }
-.insight-foot { color:#c6e9dc; font-size:.7rem; line-height:1.35; margin-top:.55rem; }
+.insight-kicker { color:#b7c6ff; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.1em; font-size:.63rem; }
+.insight-text { font-family:Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:700; line-height:1.33; margin-top:.45rem; }
+.insight-foot { color:#d7defb; font-size:.7rem; line-height:1.35; margin-top:.55rem; }
 
-.callout { border-left:3px solid var(--green); background:#edf7f2; border-radius:0 12px 12px 0; padding:.85rem 1rem; color:#284c3e; font-size:.84rem; line-height:1.5; }
+.callout { border:1px solid #d1dafa; border-left:3px solid var(--green); background:#f0f3ff; border-radius:0 12px 12px 0; padding:.88rem 1rem; color:#354263; font-size:.84rem; line-height:1.5; }
 .callout strong { color:var(--green-dark); }
-.tag { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#edf4f0; color:var(--green-dark); font-size:.69rem; font-weight:700; margin-right:.3rem; }
+.tag { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#eef1fb; color:var(--green-dark); font-size:.69rem; font-weight:700; margin-right:.3rem; }
 .legend-row { display:flex; gap:1rem; flex-wrap:wrap; color:var(--muted); font-size:.72rem; margin:.2rem 0 .5rem; }
 .legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:.28rem; }
 
 .profile-panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:1.15rem 1.2rem; }
 .profile-row { display:flex; align-items:center; gap:.75rem; margin:.78rem 0; }
 .profile-name { width:148px; font-size:.76rem; color:var(--muted); }
-.profile-track { flex:1; height:9px; background:#eaf1ed; border-radius:99px; overflow:hidden; }
-.profile-fill { height:100%; border-radius:99px; background:linear-gradient(90deg, #0b7658, #59bb91); }
-.profile-number { width:48px; text-align:right; font-family:'DM Mono',monospace; font-size:.72rem; color:var(--green-dark); }
+.profile-track { flex:1; height:9px; background:#e9edf7; border-radius:99px; overflow:hidden; }
+.profile-fill { height:100%; border-radius:99px; background:linear-gradient(90deg, #3155d4, #8ca4f0); }
+.profile-number { width:48px; text-align:right; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; font-size:.72rem; color:var(--green-dark); }
 
-.stDataFrame { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.stDataFrame { border:1px solid var(--line); border-radius:13px; overflow:hidden; box-shadow:0 4px 16px rgba(37,56,110,.035); }
+[data-testid="stDataFrame"] { background:#fff; }
 div[data-testid="stExpander"] { border-color:var(--line); border-radius:12px; background:#fff; }
 .download-row { display:flex; justify-content:flex-end; margin-top:.45rem; }
-button[kind="secondary"] { border-radius:9px; border-color:#c9ded4; color:var(--green-dark); font-weight:600; }
+button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--green-dark); font-weight:600; }
 
 .footer-note { color:#7c8983; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
-@media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.9rem; } .header-meta { display:none; } .stRadio label { padding:.38rem .48rem; font-size:.73rem; } }
+button, [role="button"] { font-family:'Lato', 'Arial', sans-serif; }
+@media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
+@media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
 </style>
 """,
     unsafe_allow_html=True,
@@ -181,9 +191,8 @@ def app_header() -> None:
         <div class="app-header">
           <div class="brand">
             <div class="brand-mark">◒</div>
-            <div><div class="brand-name">Imari Rwanda</div><div class="brand-sub">Financial inclusion observatory · NISR Big Data Hackathon 2026</div></div>
+            <div><div class="brand-name">InsightRwanda</div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
-          <div class="header-meta"><span class="live-pill"><span class="live-dot"></span> Survey intelligence</span><span>18 Oct 2026</span></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -197,7 +206,7 @@ def nav(df: pd.DataFrame) -> str:
     ]
     with st.sidebar:
         st.markdown(
-            '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">Imari Rwanda</div><div class="side-caption">Financial inclusion observatory</div></div></div>',
+            '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
             unsafe_allow_html=True,
         )
         st.markdown('<div class="side-label">Workspace</div>', unsafe_allow_html=True)
@@ -205,7 +214,7 @@ def nav(df: pd.DataFrame) -> str:
         st.markdown('<hr>', unsafe_allow_html=True)
         st.markdown('<div class="side-label">Dataset status</div>', unsafe_allow_html=True)
         st.markdown(
-            f'<div class="side-card"><div class="side-card-title">NISR survey connected</div><div class="side-card-copy">The supplied Stata dataset is ready for weighted analysis and exploration.</div><div class="side-status"><span class="side-status-dot"></span>{len(df):,} household records loaded</div></div>',
+            f'<div class="side-card"><div class="side-card-title">Dataset ready</div><div class="side-card-copy">The supplied Stata dataset is loaded read-only for weighted analytical work.</div><div class="side-status"><span class="side-status-dot"></span>{len(df):,} records loaded</div></div>',
             unsafe_allow_html=True,
         )
         st.markdown('<div class="side-card"><div class="side-card-title">Hackathon track</div><div class="side-card-copy">Track 2 · Financial Inclusion &amp; Poverty Reduction</div></div>', unsafe_allow_html=True)
@@ -216,7 +225,7 @@ def nav(df: pd.DataFrame) -> str:
 
 
 def page_intro(eyebrow: str, title: str, lede: str) -> None:
-    st.markdown(f'<div class="eyebrow">{eyebrow}</div><h1 class="page-title">{title}</h1><p class="page-lede">{lede}</p>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-intro"><div class="eyebrow">{eyebrow}</div><h1 class="page-title">{title}</h1><p class="page-lede">{lede}</p></div>', unsafe_allow_html=True)
 
 
 def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
@@ -263,13 +272,13 @@ def chart_theme(fig: go.Figure, height: int = 300, legend: bool = False) -> go.F
         margin=dict(l=4, r=8, t=12, b=8),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="DM Sans, sans-serif", color="#53655e", size=11),
+        font=dict(family="Lato, Arial, sans-serif", color="#66718b", size=11),
         showlegend=legend,
         legend=dict(orientation="h", y=1.12, x=0),
-        hoverlabel=dict(bgcolor="#14221e", font_size=12, font_family="DM Sans"),
+        hoverlabel=dict(bgcolor="#17213d", font_size=12, font_family="Lato"),
     )
-    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#dce7e1", tickfont=dict(size=10))
-    fig.update_yaxes(showgrid=True, gridcolor="#e8efeb", zeroline=False, linecolor="rgba(0,0,0,0)", tickfont=dict(size=10))
+    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#dce3ef", tickfont=dict(size=10))
+    fig.update_yaxes(showgrid=True, gridcolor="#e8ecf5", zeroline=False, linecolor="rgba(0,0,0,0)", tickfont=dict(size=10))
     return fig
 
 
@@ -304,6 +313,82 @@ def data_footer(frame: pd.DataFrame, label: str = "Filtered view") -> None:
 # -----------------------------------------------------------------------------
 # Pages
 # -----------------------------------------------------------------------------
+MODEL_FEATURES = [
+    ("Household size", "hh_size"),
+    ("Respondent sex", "b2"),
+    ("Setting", "a6"),
+    ("Internet access", "c14_5"),
+    ("Phone ownership", "f3"),
+    ("Mobile money use", "qf4_05"),
+]
+
+
+def _sigmoid(values: np.ndarray) -> np.ndarray:
+    return 1 / (1 + np.exp(-np.clip(values, -35, 35)))
+
+
+def train_priority_model(frame: pd.DataFrame) -> dict[str, object] | None:
+    """Fit a small weighted logistic model for exploratory prioritisation."""
+
+    target_mask = frame["resilience_band"].isin(["Priority", "Watch", "Resilient"])
+    feature_columns = [column for _, column in MODEL_FEATURES if column in frame]
+    if not target_mask.any() or len(feature_columns) < 3:
+        return None
+
+    model_frame = frame.loc[target_mask, feature_columns + ["resilience_band", "hh_wt"]].copy()
+    target = model_frame["resilience_band"].eq("Priority").astype(float).to_numpy()
+    if target.min() == target.max():
+        return None
+
+    raw_features = model_frame[feature_columns].apply(pd.to_numeric, errors="coerce")
+    weights = pd.to_numeric(model_frame["hh_wt"], errors="coerce").fillna(1).clip(lower=0).to_numpy()
+    weights = np.where(weights > 0, weights, 1.0)
+    rng = np.random.default_rng(42)
+    order = rng.permutation(len(model_frame))
+    split = max(1, min(len(order) - 1, int(len(order) * .8)))
+    train_idx, test_idx = order[:split], order[split:]
+
+    medians = raw_features.iloc[train_idx].median().fillna(0)
+    means = raw_features.iloc[train_idx].fillna(medians).mean()
+    scales = raw_features.iloc[train_idx].fillna(medians).std().replace(0, 1).fillna(1)
+    matrix = ((raw_features.fillna(medians) - means) / scales).to_numpy(dtype=float)
+    train_x = np.column_stack([np.ones(len(train_idx)), matrix[train_idx]])
+    test_x = np.column_stack([np.ones(len(test_idx)), matrix[test_idx]])
+    train_y, test_y = target[train_idx], target[test_idx]
+    train_w = weights[train_idx]
+
+    coefficients = np.zeros(train_x.shape[1], dtype=float)
+    normalizer = max(float(train_w.sum()), 1.0)
+    for _ in range(500):
+        probability = _sigmoid(train_x @ coefficients)
+        gradient = (train_x.T @ ((probability - train_y) * train_w)) / normalizer
+        gradient[1:] += .01 * coefficients[1:]
+        coefficients -= .12 * gradient
+
+    test_probability = _sigmoid(test_x @ coefficients)
+    accuracy = float(np.average((test_probability >= .5) == test_y, weights=weights[test_idx])) if len(test_idx) else float("nan")
+    return {
+        "features": feature_columns,
+        "medians": medians.to_dict(),
+        "means": means.to_dict(),
+        "scales": scales.to_dict(),
+        "coefficients": coefficients,
+        "accuracy": accuracy,
+        "train_rows": int(len(train_idx)),
+        "test_rows": int(len(test_idx)),
+    }
+
+
+def predict_priority_probability(model: dict[str, object], values: dict[str, float]) -> float:
+    feature_columns = model["features"]
+    row = np.array([
+        (values.get(column, model["medians"].get(column, 0)) - model["means"].get(column, 0)) / model["scales"].get(column, 1)
+        for column in feature_columns
+    ], dtype=float)
+    coefficients = np.asarray(model["coefficients"], dtype=float)
+    return float(_sigmoid(np.array([1.0, *row]) @ coefficients))
+
+
 def render_overview(df: pd.DataFrame) -> None:
     page_intro(
         "01 / National signal",
@@ -323,39 +408,85 @@ def render_overview(df: pd.DataFrame) -> None:
     with m3: metric_card("Emergency buffer", pct(emergency), "have set aside rainy-day funds", "◌", "yellow")
     with m4: metric_card("Income pressure", pct(pressure), "income does not cover living costs monthly or often", "!", "rose")
 
-    section_head("The national signal, at a glance", "Weighted household estimates · use the hover state to inspect exact values")
-    left, right = st.columns([1.25, .75])
-    with left:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Access is broad; buffers are thinner</div><div class="section-note">Share of respondents meeting each indicator</div>', unsafe_allow_html=True)
-        labels = ["Active formal access", "Mobile money", "Own money", "Saves", "Emergency fund", "Internet access"]
-        measures = ["active_access", "mobile_money", "owns_money", "saves_regularly", "emergency_fund", "internet_access"]
-        values = [weighted_rate(view, view[m]) * 100 for m in measures]
-        colors = ["#0b7658", "#2f9a74", "#66bd94", "#9bd5b8", "#d5ad35", "#d4793d"]
-        fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
-        fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8efeb")
-        fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(chart_theme(fig, 328), use_container_width=True, config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
-    with right:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">A transparent composite of four observed capabilities</div>', unsafe_allow_html=True)
-        band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
-        fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#0b7658", "#f2c94c", "#d65e61"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
-        resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
-        fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#687771'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#14221e", family="Manrope"))
-        st.plotly_chart(chart_theme(fig, 228), use_container_width=True, config={"displayModeBar": False})
-        st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#0b7658"></span>Resilient</span><span><span class="legend-dot" style="background:#f2c94c"></span>Watch</span><span><span class="legend-dot" style="background:#d65e61"></span>Priority</span></div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    overview_tabs = st.tabs(["National signal", "Opportunity map", "Train & predict"])
+    with overview_tabs[0]:
+        section_head("The national signal, at a glance", "Weighted household estimates · use the hover state to inspect exact values")
+        left, right = st.columns([1.25, .75])
+        with left:
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Access is broad; buffers are thinner</div><div class="section-note">Share of respondents meeting each indicator</div>', unsafe_allow_html=True)
+            labels = ["Active formal access", "Mobile money", "Own money", "Saves", "Emergency fund", "Internet access"]
+            measures = ["active_access", "mobile_money", "owns_money", "saves_regularly", "emergency_fund", "internet_access"]
+            values = [weighted_rate(view, view[m]) * 100 for m in measures]
+            colors = ["#3155d4", "#5274e6", "#8ca4f0", "#c5d1fb", "#e5ae2f", "#de7c3f"]
+            fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
+            fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5")
+            fig.update_yaxes(autorange="reversed")
+            st.plotly_chart(chart_theme(fig, 328), use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+        with right:
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">A transparent composite of four observed capabilities</div>', unsafe_allow_html=True)
+            band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
+            fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
+            resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
+            fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Georgia"))
+            st.plotly_chart(chart_theme(fig, 228), use_container_width=True, config={"displayModeBar": False})
+            st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    section_head("The opportunity map", "A first read for policy and programme teams")
-    a, b, c = st.columns(3)
-    with a:
-        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 01 · access</div><div class="insight-text">{pct(mobile)} use mobile money today.</div><div class="insight-foot">Mobile money is the clearest delivery rail for reaching households already inside the formal ecosystem.</div></div>', unsafe_allow_html=True)
-    with b:
-        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 02 · resilience</div><div class="insight-text">{pct(1 - emergency)} report no emergency fund.</div><div class="insight-foot">The inclusion gap is not only account ownership; it is the ability to absorb a shock without selling assets or borrowing.</div></div>', unsafe_allow_html=True)
-    with c:
-        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
+    with overview_tabs[1]:
+        section_head("The opportunity map", "A first read for policy and programme teams")
+        a, b, c = st.columns(3)
+        with a:
+            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 01 · access</div><div class="insight-text">{pct(mobile)} use mobile money today.</div><div class="insight-foot">Mobile money is the clearest delivery rail for reaching households already inside the formal ecosystem.</div></div>', unsafe_allow_html=True)
+        with b:
+            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 02 · resilience</div><div class="insight-text">{pct(1 - emergency)} report no emergency fund.</div><div class="insight-foot">The inclusion gap is not only account ownership; it is the ability to absorb a shock without selling assets or borrowing.</div></div>', unsafe_allow_html=True)
+        with c:
+            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
+
+    with overview_tabs[2]:
+        section_head("Train a prioritisation model", "Estimate the likelihood that a household falls into the Priority resilience band")
+        st.caption("This exploratory model is trained on the current filtered view. It is descriptive, not causal, and should not be used as an eligibility decision on its own.")
+        with st.form("priority_model_form"):
+            input_left, input_right = st.columns(2)
+            with input_left:
+                household_size = st.number_input("Household size", min_value=1, max_value=30, value=4, step=1)
+                respondent_sex = st.selectbox("Respondent sex", ["Female", "Male"])
+                setting = st.selectbox("Setting", ["Rural", "Urban"])
+            with input_right:
+                internet_access = st.selectbox("Internet access", ["No", "Yes"])
+                phone_ownership = st.selectbox("Phone ownership", ["No", "Yes"])
+                mobile_money_use = st.selectbox("Mobile money use", ["No", "Yes"])
+            train_and_predict = st.form_submit_button("Train model and predict", type="primary")
+
+        if train_and_predict:
+            model = train_priority_model(view)
+            if model is None:
+                st.session_state.pop("priority_model", None)
+                st.session_state.pop("priority_prediction", None)
+                st.error("The filtered view does not contain enough target variation to train this model.")
+            else:
+                prediction_values = {
+                    "hh_size": float(household_size),
+                    "b2": 1.0 if respondent_sex == "Male" else 2.0,
+                    "a6": 1.0 if setting == "Urban" else 2.0,
+                    "c14_5": 1.0 if internet_access == "Yes" else 2.0,
+                    "f3": 1.0 if phone_ownership == "Yes" else 2.0,
+                    "qf4_05": 1.0 if mobile_money_use == "Yes" else 2.0,
+                }
+                st.session_state["priority_model"] = model
+                st.session_state["priority_prediction"] = predict_priority_probability(model, prediction_values)
+
+        model = st.session_state.get("priority_model")
+        prediction = st.session_state.get("priority_prediction")
+        if model is not None and prediction is not None:
+            result_left, result_right = st.columns(2)
+            with result_left:
+                st.metric("Predicted Priority probability", f"{prediction:.1%}")
+            with result_right:
+                st.metric("Holdout accuracy", f"{model['accuracy']:.1%}")
+            st.caption(f"Trained on {model['train_rows']:,} records and evaluated on {model['test_rows']:,} held-out records using household weights.")
 
     data_footer(view)
 
@@ -384,7 +515,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         names = [results[i].definition.title for i in INDICATORS]
         values = [results[i].estimate * 100 for i in INDICATORS]
-        colors = ["#0b7658", "#2f9a74", "#d5ad35", "#d4793d", "#d65e61", "#7e9c8e"]
+        colors = ["#3155d4", "#5274e6", "#e5ae2f", "#de7c3f", "#d95362", "#7182a8"]
         fig = go.Figure(go.Bar(x=values, y=names, orientation="h", marker_color=colors, text=[f"{v:.1f}%" for v in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
         fig.update_yaxes(autorange="reversed")
@@ -395,7 +526,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         result = results[selected]
         definition = result.definition
         st.markdown(
-            f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.18rem">{definition.title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#07513e">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
+            f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.18rem">{definition.title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -467,7 +598,7 @@ def render_regional(df: pd.DataFrame) -> None:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Active access by province</div><div class="section-note">Currently use at least one formal financial channel</div>', unsafe_allow_html=True)
         fig = go.Figure()
-        fig.add_trace(go.Bar(y=table["group"], x=table["value"] * 100, orientation="h", marker_color="#0b7658", name="Active access", text=[f"{v:.0f}%" for v in table["value"] * 100], textposition="outside", hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
+        fig.add_trace(go.Bar(y=table["group"], x=table["value"] * 100, orientation="h", marker_color="#3155d4", name="Active access", text=[f"{v:.0f}%" for v in table["value"] * 100], textposition="outside", hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
         st.plotly_chart(chart_theme(fig, 340), use_container_width=True, config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
@@ -475,7 +606,7 @@ def render_regional(df: pd.DataFrame) -> None:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Three signals, one view</div><div class="section-note">Share of respondents · province comparison</div>', unsafe_allow_html=True)
         fig = go.Figure()
-        for col, name, color in [("value", "Active access", "#0b7658"), ("emergency", "Emergency fund", "#d5ad35"), ("internet", "Internet access", "#d4793d")]:
+        for col, name, color in [("value", "Active access", "#3155d4"), ("emergency", "Emergency fund", "#e5ae2f"), ("internet", "Internet access", "#de7c3f")]:
             fig.add_trace(go.Bar(x=table["group"], y=table[col] * 100, name=name, marker_color=color, hovertemplate=f"%{{x}} · {name}: %{{y:.1f}}%<extra></extra>"))
         fig.update_layout(barmode="group")
         fig.update_yaxes(range=[0, 108], ticksuffix="%")
@@ -537,7 +668,7 @@ def render_resilience(df: pd.DataFrame) -> None:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Priority share by setting</div><div class="section-note">A useful first cut for delivery design</div>', unsafe_allow_html=True)
         setting = weighted_group(view.assign(priority=view["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
-        fig = go.Figure(go.Bar(x=setting["group"], y=setting["value"] * 100, marker_color=["#d65e61" if x == "Rural" else "#e7a09f" for x in setting["group"]], text=[f"{v:.0f}%" for v in setting["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+        fig = go.Figure(go.Bar(x=setting["group"], y=setting["value"] * 100, marker_color=["#d95362" if x == "Rural" else "#f0a1ad" for x in setting["group"]], text=[f"{v:.0f}%" for v in setting["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
         fig.update_yaxes(range=[0, max(30, float(setting["value"].max() * 100 + 10))], ticksuffix="%")
         st.plotly_chart(chart_theme(fig, 245), use_container_width=True, config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
@@ -592,7 +723,7 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
         grouped = weighted_group(view, dimension, measure).sort_values("value", ascending=True)
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown(f'<div class="section-title">{label} by {dimension.replace("_", " ")}</div><div class="section-note">Weighted share of respondents</div>', unsafe_allow_html=True)
-        fig = go.Figure(go.Bar(y=grouped["group"], x=grouped["value"] * 100, orientation="h", marker_color="#0b7658", text=[f"{v:.0f}%" for v in grouped["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
+        fig = go.Figure(go.Bar(y=grouped["group"], x=grouped["value"] * 100, orientation="h", marker_color="#3155d4", text=[f"{v:.0f}%" for v in grouped["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
         st.plotly_chart(chart_theme(fig, max(260, min(510, 35 * len(grouped) + 90))), use_container_width=True, config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
@@ -634,7 +765,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
     missing_values = [(column, df[column].isna().mean() * 100) for column in missing_cols if column in df]
     left, right = st.columns([1.05, .95])
     with left:
-        fig = go.Figure(go.Bar(x=[value for _, value in missing_values], y=[column for column, _ in missing_values], orientation="h", marker_color="#d4793d", text=[f"{value:.1f}%" for _, value in missing_values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}% missing<extra></extra>"))
+        fig = go.Figure(go.Bar(x=[value for _, value in missing_values], y=[column for column, _ in missing_values], orientation="h", marker_color="#de7c3f", text=[f"{value:.1f}%" for _, value in missing_values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}% missing<extra></extra>"))
         fig.update_xaxes(range=[0, max(10, max((value for _, value in missing_values), default=0) + 10)], ticksuffix="%")
         fig.update_yaxes(autorange="reversed")
         st.plotly_chart(chart_theme(fig, 300), use_container_width=True, config={"displayModeBar": False})
@@ -672,7 +803,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
             ("04", "Calculate", "Apply the indicator definition, denominator and household weight."),
             ("05", "Explain", "Display the estimate with source variables, scope and limitations."),
         ]:
-            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.72rem 0;border-bottom:1px solid #e8efeb"><div class="mono" style="color:#0b7658;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#687771;line-height:1.4;margin-top:.18rem">{copy}</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.72rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{copy}</div></div></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Available source materials", "What was actually found in the workspace")
@@ -689,7 +820,7 @@ def render_about(df: pd.DataFrame) -> None:
     page_intro(
         "05 / About the build",
         "A competition-ready decision tool, grounded in NISR data.",
-        "Imari Rwanda translates a large financial-inclusion survey into a presentation-ready interface for policy teams, financial-service providers and civil-society partners.",
+        "InsightRwanda translates a large financial-inclusion survey into a presentation-ready interface for policy teams, financial-service providers and civil-society partners.",
     )
     left, right = st.columns([1.05, .95])
     with left:
@@ -697,7 +828,7 @@ def render_about(df: pd.DataFrame) -> None:
     with right:
         st.markdown('<div class="chart-card"><div class="eyebrow">What is inside</div><div class="section-title" style="font-size:1.3rem">A compact, auditable stack</div>', unsafe_allow_html=True)
         for no, title, desc in [("01", "Overview", "National signal with weighted KPI cards and the headline inclusion / resilience gap."), ("02", "Regional pulse", "Province and district comparison for targeting and delivery planning."), ("03", "Resilience lab", "Transparent composite lens and action prompts for household protection."), ("04", "Data explorer", "Inspect aggregate evidence; exports remain approval-gated.")]:
-            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.75rem 0;border-bottom:1px solid #e8efeb"><div class="mono" style="color:#0b7658;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#687771;line-height:1.4;margin-top:.18rem">{desc}</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.75rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{desc}</div></div></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Method and transparency", "The dashboard is intentionally descriptive")
@@ -713,12 +844,12 @@ def render_about(df: pd.DataFrame) -> None:
     criteria = pd.DataFrame([
         ["Problem relevance", "Targets financial exclusion, poverty dynamics and household shock absorption."],
         ["Data + methodology", "Uses NISR-labelled Stata survey data, household weights and transparent indicators."],
-        ["Tech innovation", "Turns a 2,442-variable survey into an interactive targeting and resilience workflow."],
+            ["Tech innovation", "Turns the supplied survey into an interactive targeting and resilience workflow."],
         ["Usability + design", "Custom navigation, responsive layout, plain-language narrative and downloadable evidence."],
         ["Tangible impact", "Surfaces where to strengthen buffers, assisted digital access and shock-responsive finance."],
     ], columns=["Criterion", "Prototype response"])
     st.dataframe(criteria, hide_index=True, use_container_width=True)
-    st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · 2,442 source variables in the supplied file · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
 
 
 def main() -> None:
