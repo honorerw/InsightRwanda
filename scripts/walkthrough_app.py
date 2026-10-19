@@ -1,8 +1,12 @@
 """Headless walkthrough of every dashboard page using Streamlit AppTest.
 
-This exercises the real UI code path (script execution, navigation, filters,
-charts) without a browser. Each page must render without raising an exception.
-Run directly, or wire into the test suite if you accept the extra runtime.
+Phase 1 — every page renders without exception.
+Phase 2 — every page still renders with a non-default filter lens applied
+          (province=Kigali, setting=Urban, respondent=Female).
+Phase 3 — the Overview page's tabs are exercised.
+
+A fresh AppTest session per visit avoids AppTest artefacts caused by orphaned
+widget keys from a previous page's filter bar. Exits non-zero on any failure.
 """
 
 from __future__ import annotations
@@ -28,11 +32,7 @@ PAGES = [
 
 
 def visit(page: str):
-    """Render one page in a fresh AppTest session with the nav pre-selected.
-
-    A fresh session per page avoids AppTest artefacts caused by orphaned
-    widget keys from a previous page's filter bar.
-    """
+    """Render one page in a fresh AppTest session with the nav pre-selected."""
 
     at = st_test.AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
     at.session_state["workspace_nav"] = page
@@ -40,22 +40,65 @@ def visit(page: str):
     return at
 
 
+def apply_filter_lens(at: st_test.AppTest, page: str) -> bool:
+    """Set the page's filter widgets to a non-default lens; True if applied."""
+
+    # Explicit mapping of nav page -> filter_bar key prefix in app.py.
+    prefix = {
+        "Overview": "overview",
+        "Financial inclusion": "financial_inclusion",
+        "Poverty insights": "poverty_context",
+        "Geographic insights": "regional",
+        "Resilience lab": "resilience",
+        "Data explorer": "explorer",
+    }.get(page)
+    if prefix is None:
+        return False  # page has no filter bar
+    at.selectbox(key=f"{prefix}_province").set_value("Kigali")
+    at.selectbox(key=f"{prefix}_setting").set_value("Urban")
+    at.selectbox(key=f"{prefix}_sex").set_value("Female")
+    at.run()
+    return True
+
+
+def report(label: str, at: st_test.AppTest) -> bool:
+    if at.exception:
+        print(f"  FAIL  {label}: {at.exception[0].value}")
+        return False
+    blocks = len(at.markdown) + len(at.metric) + len(at.dataframe)
+    print(f"  OK    {label} ({blocks} rendered blocks)")
+    return True
+
+
 def main() -> int:
     failures: list[str] = []
+
+    print("Phase 1 — baseline render of every page")
+    for page in PAGES:
+        if not report(page, visit(page)):
+            failures.append(page)
+
+    print("Phase 2 — filtered lens (Kigali / Urban / Female) on every filtered page")
     for page in PAGES:
         at = visit(page)
-        if at.exception:
-            failures.append(page)
-            print(f"  FAIL  {page}: {at.exception[0].value}")
-        else:
-            n_metrics = len(at.metric) + len(at.markdown)
-            print(f"  OK    {page} rendered "
-                  f"({n_metrics} metric/markdown blocks, {len(at.dataframe)} dataframes)")
+        if apply_filter_lens(at, page) and not report(f"{page} · Kigali/Urban/Female", at):
+            failures.append(f"{page} (filtered)")
+
+    print("Phase 3 — Overview tab structure")
+    at = visit("Overview")
+    if at.exception:
+        failures.append("Overview tabs")
+        print(f"  FAIL  Overview tabs: {at.exception[0].value}")
+    elif len(at.tabs) == 3:
+        print("  OK    Overview · 3 tabs present (National signal / Opportunity map / Train & predict)")
+    else:
+        failures.append("Overview tab count")
+        print(f"  FAIL  Overview · expected 3 tabs, found {len(at.tabs)}")
 
     if failures:
-        print(f"\nWALKTHROUGH FAILED ({len(failures)}/{len(PAGES)}): {failures}")
+        print(f"\nWALKTHROUGH FAILED ({len(failures)}): {failures}")
         return 1
-    print(f"\nWALKTHROUGH PASSED: all {len(PAGES)} pages rendered without exception.")
+    print("\nWALKTHROUGH PASSED: baseline, filtered and interactive checks all clear.")
     return 0
 
 
