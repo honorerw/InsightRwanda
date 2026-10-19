@@ -94,10 +94,6 @@ async def main() -> int:
                 if message.get("id") == next_id:
                     return message
 
-        def body_text() -> str:
-            # returns the last polled innerText
-            return _state.get("text", "")
-
         _state: dict[str, str] = {}
 
         async def poll_text() -> None:
