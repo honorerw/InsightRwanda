@@ -39,10 +39,11 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 13 tests. It exercises the supplied Stata file
+The current test suite contains 26 tests. It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
-filtering, source errors and publication gates.
+filtering, source errors, publication gates, bootstrap intervals, income-band
+context estimates and the official-poverty unlock contract.
 
 ## Reproducibility record
 
@@ -52,7 +53,7 @@ The supplied source is loaded read-only from `data/dataset.dta`:
 - source variables inventoried: 2,442;
 - analytical slice: 94 documented source variables, plus derived labels and indicators;
 - SHA-256: `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae`;
-- analysis version at this audit: `financial_inclusion_f43dfd9a140b` (generated from the calculation, loading and quality-check code at runtime; the previous audit value was `financial_inclusion_135869b472e3` before the source-error handling in `load_analysis_data` was hardened to also catch `struct.error`).
+- analysis version at this audit: `financial_inclusion_3d668fd37080` (generated from the calculation, loading, quality-check and estimation code at runtime; previous audit values `financial_inclusion_f43dfd9a140b`, then `financial_inclusion_135869b472e3`).
 
 The analysis version changes when relevant research logic changes. The source
 hash is calculated from the actual file bytes, not from its filename or metadata.
@@ -73,6 +74,15 @@ denominator; they are not silently treated as negative responses.
 The project calculates descriptive, weighted estimates. It does not claim
 official publication status or survey-design standard errors because the
 workspace does not supply the required methodology and variance documentation.
+Bootstrap interval estimates (nonparametric, weighted, seeded) are provided
+for every financial-inclusion indicator with an explicit note that they are
+not survey-design standard errors. Labelled income-band context estimates
+(EI-01…EI-03, from the embedded N11a_lbl/N12a_lbl band labels) are reported
+as exploratory financial context on the Poverty insights page: they are not
+poverty rates. An official poverty estimation stays blocked behind a
+code-enforced contract (`official_poverty_status`) until a documented poverty
+line, poverty concept, welfare aggregate, variance documentation,
+authorization record and publication approval are all supplied explicitly.
 
 ## Research boundaries
 

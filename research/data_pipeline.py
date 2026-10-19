@@ -41,6 +41,23 @@ DISTRICTS = {
 URBAN_RURAL = {1: "Urban", 2: "Rural"}
 SEX = {1: "Male", 2: "Female"}
 
+# Embedded Stata band labels (N11a_lbl / N12a_lbl), verified against the source.
+INCOME_BAND_MONTHLY = {
+    1: "1,000 Rwf or less", 2: "1,001 - 3,000 Rwf", 3: "3,001 - 5,000 Rwf",
+    4: "5,001 - 7,000 Rwf", 5: "7,001 - 10,000 Rwf", 6: "10,001 - 15,000 Rwf",
+    7: "15,001 - 20,000 Rwf", 8: "20,001 - 25,000 Rwf", 9: "25,001 - 30,000 Rwf",
+    10: "30,001 - 40,000 Rwf", 11: "40,001 - 50,000 Rwf", 12: "50,001 - 100,000 Rwf",
+    13: "100,001 - 300,000 Rwf", 14: "300,001 - 500,000 Rwf", 15: "More than 500,000 Rwf",
+    16: "Irregular/seasonal income",
+}
+INCOME_BAND_ANNUAL = {
+    1: "12,000 Rwf or less", 2: "12,001 - 15,000 Rwf", 3: "15,001 - 17,000 Rwf",
+    4: "17,001 - 20,000 Rwf", 5: "20,001 - 30,000 Rwf", 6: "30,001 - 40,000 Rwf",
+    7: "40,001 - 50,000 Rwf", 8: "50,001 - 80,000 Rwf", 9: "80,001 - 100,000 Rwf",
+    10: "100,001 - 150,000 Rwf", 11: "150,001 - 200,000 Rwf", 12: "200,001 - 250,000 Rwf",
+    13: "250,001 - 300,000 Rwf", 14: "More than 300,000 Rwf",
+}
+
 
 class SourceLoadError(RuntimeError):
     """Raised when a source cannot be read as the expected analytical Stata file."""

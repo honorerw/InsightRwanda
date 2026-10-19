@@ -15,6 +15,14 @@ from research.data_pipeline import (
     filter_analysis_data as pipeline_filter_analysis_data,
     load_analysis_data as pipeline_load_analysis_data,
 )
+from research.estimation import (
+    BOOTSTRAP_NOTE,
+    CONTEXT_ESTIMATES,
+    calculate_context_estimate,
+    context_weight_distribution,
+    official_poverty_status,
+    weighted_bootstrap_ci,
+)
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 
@@ -575,7 +583,73 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
     with b:
         metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow")
-    st.markdown('<div class="footer-note">These context indicators should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology. Source: supplied Stata dataset; release period not documented.</div>', unsafe_allow_html=True)
+
+    render_estimation_section(view)
+    st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology. Source: supplied Stata dataset; release period not documented.</div>', unsafe_allow_html=True)
+
+
+def render_estimation_section(view: pd.DataFrame) -> None:
+    """Estimation layer: labelled context estimates, bootstrap intervals and the official unlock contract."""
+
+    section_head(
+        "Exploratory estimates — labelled, never official",
+        "Income-band context from the embedded Stata band labels · bootstrap intervals are NOT survey-design standard errors",
+    )
+    context_cards = st.columns(3)
+    for slot, estimate_id in zip(context_cards, CONTEXT_ESTIMATES):
+        result = calculate_context_estimate(view, estimate_id)
+        definition = result["definition"]
+        with slot:
+            metric_card(
+                definition.title,
+                pct(result["estimate"], 1),
+                f"weighted population {result['weight_sum']:,.0f}",
+                "≡" if estimate_id == "EI-02" else "≣",
+                "orange" if estimate_id == "EI-02" else "yellow",
+            )
+
+    band_tab, interval_tab, contract_tab = st.tabs(["Income-band detail", "Bootstrap intervals", "Official estimation contract"])
+    with band_tab:
+        monthly = context_weight_distribution(view, "n11").sort_values(ascending=False)
+        annual = context_weight_distribution(view, "n12").sort_values(ascending=False)
+        left, right = st.columns(2)
+        with left:
+            fig = go.Figure(go.Bar(y=monthly.index, x=monthly.values, orientation="h", marker_color="#de7c3f", text=[f"{v:,.0f}" for v in monthly.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
+            st.markdown('<div class="chart-card"><div class="section-title">Monthly personal income bands</div><div class="section-note">Weighted population by band · don\'t-know/refusal excluded</div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_theme(fig, 420), use_container_width=True, config={"displayModeBar": False}, width="stretch")
+            st.markdown('</div>', unsafe_allow_html=True)
+        with right:
+            fig = go.Figure(go.Bar(y=annual.index, x=annual.values, orientation="h", marker_color="#8ca4f0", text=[f"{v:,.0f}" for v in annual.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
+            st.markdown('<div class="chart-card"><div class="section-title">Annual total income bands</div><div class="section-note">Weighted population by band · don\'t-know/refusal excluded</div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_theme(fig, 420), use_container_width=True, config={"displayModeBar": False}, width="stretch")
+            st.markdown('</div>', unsafe_allow_html=True)
+        caveats = " ".join(limitation for estimate_id in CONTEXT_ESTIMATES for limitation in CONTEXT_ESTIMATES[estimate_id].limitations)
+        st.markdown(f'<div class="callout"><strong>Why this is not poverty.</strong><br>These bands are self-reported and band-coded; they are neither household consumption nor a welfare aggregate. They stay financial-context statistics. {caveats}</div>', unsafe_allow_html=True)
+
+    with interval_tab:
+        rows = []
+        for indicator_id in INDICATORS:
+            ci = weighted_bootstrap_ci(view, indicator_id, n_boot=300, seed=42)
+            rows.append({
+                "ID": indicator_id,
+                "Indicator": INDICATORS[indicator_id].title,
+                "Point": ci.estimate,
+                "Low (95%)": ci.low,
+                "High (95%)": ci.high,
+            })
+        interval_table = pd.DataFrame(rows).set_index("ID")
+        interval_table[["Point", "Low (95%)", "High (95%)"]] = interval_table[["Point", "Low (95%)", "High (95%)"]].map(lambda v: f"{v * 100:.1f}%")
+        st.dataframe(interval_table, use_container_width=True, height=240)
+        st.markdown(f'<div class="callout"><strong>Method.</strong><br>{BOOTSTRAP_NOTE}</div>', unsafe_allow_html=True)
+
+    with contract_tab:
+        status = official_poverty_status()
+        contract = pd.DataFrame(
+            [(req, "missing — estimation blocked") for req in status.missing],
+            columns=["Required input", "Status"],
+        )
+        st.dataframe(contract, hide_index=True, use_container_width=True, height=250)
+        st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly in <span class="mono">research/estimation.py::official_poverty_status</span> by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
 
 
 def render_regional(df: pd.DataFrame) -> None:

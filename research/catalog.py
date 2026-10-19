@@ -60,7 +60,7 @@ def _analysis_version() -> str:
 
     digest = hashlib.sha256()
     code_root = Path(__file__).resolve().parent
-    for name in ["data_pipeline.py", "indicators.py", "quality.py"]:
+    for name in ["data_pipeline.py", "indicators.py", "quality.py", "estimation.py"]:
         digest.update((code_root / name).read_bytes())
     return f"financial_inclusion_{digest.hexdigest()[:12]}"
 
