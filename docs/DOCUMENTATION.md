@@ -325,7 +325,7 @@ python -m unittest discover -s tests -v
 
 26 tests total (13 original + 13 estimation tests). Executed again after the estimation layer was added:
 
-- **Result:** `Ran 13 tests in 3.357s. OK`, exit code 0 — **13/13 pass, fully green.**
+- **Result (historical audit, superseded by the estimation round):** `Ran 13 tests in 3.357s. OK`, exit code 0 — **13/13 pass, fully green.**
 - **Previously failing (`test_source_errors_are_explicit`)** — root-cause tracked to `pandas.read_stata` raising `struct.error` on intentionally corrupted input; the exception tuple in `load_analysis_data` (`except (OSError, ValueError, EOFError, ImportError)`) did not include `struct.error`. Verified by direct reproduction, then **fixed** by importing `struct` and adding it to the caught exception tuple so corrupt inputs produce a clean `SourceLoadError` (matches the test's intended contract; no assertion was weakened).
 - **Side effect of the fix:** the `analysis_version` fingerprint naturally changed to `financial_inclusion_f43dfd9a140b` (its design behaviour: it re-fingerprints whenever research logic changes). The README's audit record was synced accordingly; the previous audit value was `financial_inclusion_135869b472e3`.
 - Additional polish applied in the same pass: `select_dtypes` updated to `include=["object", "str"]` to silence the pandas 4.0 `Pandas4Warning`, and "About the build" was wired into the sidebar navigation (previously dead code).

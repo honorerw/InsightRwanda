@@ -10,7 +10,7 @@ Access to a bank account is not resilience. This prototype answers the sharper q
 
 ## What differentiates this build from a demo dashboard
 
-1. **Every number is reproducible.** Indicators are recalculated from the source file through one documented pipeline; the source SHA-256 and a code-derived `analysis_version` fingerprint (`financial_inclusion_f43dfd9a140b`) are displayed in-app. Change the research logic and the fingerprint changes — tamper-evidence, not decoration.
+1. **Every number is reproducible.** Indicators are recalculated from the source file through one documented pipeline; the source SHA-256 and a code-derived `analysis_version` fingerprint (`financial_inclusion_3d668fd37080`) are displayed in-app. Change the research logic and the fingerprint changes — tamper-evidence, not decoration.
 2. **Indicators are a contract, not a chart.** Each of FI-01…FI-06 carries an explicit definition, valid-response rule, source-variable mapping, method and stated limitations, all surfaced on the dashboard itself.
 3. **Honesty is the feature.** The Poverty page shows exact research blockers (no poverty line, no welfare aggregate, no variance methodology) instead of fabricating a rate. Denominators are visible; missing responses are excluded, never imputed or relabelled as "No".
 4. **Governance is enforced in code.** Household-level records and exports stay locked until explicit authorization plus publication approval exist in the source profile — enforced by `aggregate_release_allowed()` and verified by the test suite.

@@ -22,7 +22,7 @@ The app opens on **Overview** and loads the supplied Stata source directly from 
 To re-verify before judging (optional, ~5 s):
 
 ```bash
-python -m unittest discover -s tests        # 13/13 pass
+python -m unittest discover -s tests        # 26/26 pass
 python scripts/walkthrough_app.py           # headless render of all 9 pages
 python scripts/browser_render_check.py      # real-Chrome render + marker check
 ```
@@ -82,7 +82,7 @@ Why the access-vs-resilience framing is the actionable one, and how the prototyp
 
 | Check | Result |
 |---|---|
-| Unit tests (real source + synthetic fixtures) | 13/13 OK |
+| Unit tests (real source + synthetic fixtures + estimation) | 26/26 OK |
 | Headless page walkthrough (incl. filters, tabs) | 9/9 + 6/6 + tabs OK |
 | Real-browser render (Chrome/CDP, DOM + pixel check) | PASSED |
 | Data-quality checks on the source file | 0 FAIL |
