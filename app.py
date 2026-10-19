@@ -203,6 +203,7 @@ def nav(df: pd.DataFrame) -> str:
     pages = [
         "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
         "Resilience lab", "Data quality", "Data explorer", "Methods & sources",
+        "About the build",
     ]
     with st.sidebar:
         st.markdown(
@@ -818,7 +819,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
 
 def render_about(df: pd.DataFrame) -> None:
     page_intro(
-        "05 / About the build",
+        "09 / About the build",
         "A competition-ready decision tool, grounded in NISR data.",
         "InsightRwanda translates a large financial-inclusion survey into a presentation-ready interface for policy teams, financial-service providers and civil-society partners.",
     )
@@ -880,7 +881,7 @@ def main() -> None:
         render_explorer(df, profile)
     elif page == "Methods & sources":
         render_methods(profile, checks)
-    else:
+    elif page == "About the build":
         render_about(df)
 
 

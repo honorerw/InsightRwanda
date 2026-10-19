@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
+import struct
+
 import numpy as np
 import pandas as pd
 
@@ -83,12 +85,12 @@ def load_analysis_data(path: str | Path) -> pd.DataFrame:
             convert_categoricals=False,
             preserve_dtypes=False,
         )
-    except (OSError, ValueError, EOFError, ImportError) as exc:
+    except (OSError, ValueError, EOFError, ImportError, struct.error) as exc:
         raise SourceLoadError(
             f"Could not read {source} as a compatible Stata source with the required analytical fields. "
             f"Original error: {exc}"
         ) from exc
-    for column in df.select_dtypes(include="object").columns:
+    for column in df.select_dtypes(include=["object", "str"]).columns:
         df[column] = df[column].mask(df[column].eq(""), np.nan)
     df["province"] = df["a1"].map(PROVINCES).fillna("Unknown")
     df["district"] = df["a2"].map(DISTRICTS).fillna("Unknown")

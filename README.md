@@ -52,7 +52,7 @@ The supplied source is loaded read-only from `data/dataset.dta`:
 - source variables inventoried: 2,442;
 - analytical slice: 94 documented source variables, plus derived labels and indicators;
 - SHA-256: `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae`;
-- analysis version at this audit: `financial_inclusion_135869b472e3` (generated from the calculation, loading and quality-check code at runtime).
+- analysis version at this audit: `financial_inclusion_f43dfd9a140b` (generated from the calculation, loading and quality-check code at runtime; the previous audit value was `financial_inclusion_135869b472e3` before the source-error handling in `load_analysis_data` was hardened to also catch `struct.error`).
 
 The analysis version changes when relevant research logic changes. The source
 hash is calculated from the actual file bytes, not from its filename or metadata.
