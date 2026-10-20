@@ -21,8 +21,9 @@ The application is connected to the supplied `data/dataset.dta` source. It does 
 - Geographic comparisons using the supplied province/district identifiers.
 - An explicit poverty-status page that reports blockers rather than fabricating poverty rates.
 - Governance-gated aggregate data explorer; household-level preview and raw export stay disabled pending explicit authorization, publication approval and an approved disclosure rule.
+- One-page, non-gated insight brief for every page (PDF + PNG) — download buttons in the app and committed copies in `docs/briefs/`; aggregate values only, no household records.
 - Methods, source profile, governance status and evidence-chain pages.
-- Real-source tests in `tests/test_real_pipeline.py`.
+- Real-source tests in `tests/test_real_pipeline.py` plus estimation and brief test suites.
 
 ## Run locally
 
@@ -39,11 +40,13 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 26 tests. It exercises the supplied Stata file
+The current test suite contains 39 tests. It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
 filtering, source errors, publication gates, bootstrap intervals, income-band
-context estimates and the official-poverty unlock contract.
+context estimates, the official-poverty unlock contract and the nine one-page
+briefs (content, weighting arithmetic, deterministic rendering, PDF/PNG validity
+and identifier exclusion).
 
 ## Reproducibility record
 
@@ -83,6 +86,12 @@ poverty rates. An official poverty estimation stays blocked behind a
 code-enforced contract (`official_poverty_status`) until a documented poverty
 line, poverty concept, welfare aggregate, variance documentation,
 authorization record and publication approval are all supplied explicitly.
+
+Every page also offers a one-page insight brief (PDF and PNG, one per page,
+nine total; committed copies in `docs/briefs/`). Briefs contain aggregate
+values only — never household records or gated exports — and repeat what their
+numbers cannot claim. The PDF embeds the same rendered page as the PNG
+(Pillow, 200 dpi), so brief text is an image, not selectable text.
 
 ## Research boundaries
 

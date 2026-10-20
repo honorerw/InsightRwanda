@@ -23,6 +23,13 @@ from research.estimation import (
     official_poverty_status,
     weighted_bootstrap_ci,
 )
+from research.briefs import (
+    LENS_PREFIXES,
+    brief_filenames,
+    build_page_brief,
+    render_brief_pdf,
+    render_brief_png,
+)
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 
@@ -927,6 +934,59 @@ def render_about(df: pd.DataFrame) -> None:
     st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
 
 
+def _lens_view(df: pd.DataFrame, page: str) -> pd.DataFrame:
+    """Reapply the active page's filter-bar lens (without re-rendering widgets)."""
+
+    prefix = LENS_PREFIXES.get(page)
+    if not prefix:
+        return df
+    province = st.session_state.get(f"{prefix}_province", "All provinces")
+    district = st.session_state.get(f"{prefix}_district", "All districts")
+    setting = st.session_state.get(f"{prefix}_setting", "All settings")
+    sex = st.session_state.get(f"{prefix}_sex", "All respondents")
+    pre = df if province == "All provinces" else df[df["province"].eq(province)]
+    return pipeline_filter_analysis_data(
+        pre,
+        district=None if district == "All districts" else district,
+        setting=None if setting == "All settings" else setting,
+        respondent_sex=None if sex == "All respondents" else sex,
+    )
+
+
+def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+    """One non-gated, take-away brief for this page: aggregate-only PNG + one-page PDF."""
+
+    view = _lens_view(df, page)
+    try:
+        brief = build_page_brief(page, view, profile, checks)
+    except Exception as exc:  # briefs must never break a page
+        st.warning(f"Brief export unavailable for this page: {exc}")
+        return
+    names = brief_filenames(brief)
+    pdf_bytes, png_bytes = render_brief_pdf(brief), render_brief_png(brief)
+    left, right = st.columns(2)
+    with left:
+        st.download_button(
+            "Download one-page brief (PDF)",
+            data=pdf_bytes,
+            file_name=names["pdf"],
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    with right:
+        st.download_button(
+            "Download one-page brief (PNG)",
+            data=png_bytes,
+            file_name=names["png"],
+            mime="image/png",
+            use_container_width=True,
+        )
+    st.markdown(
+        '<div class="footer-note">The brief is built from aggregate values only — no household records, exports or edit of the source. It reflects the analysis lens currently selected above.</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     try:
         raw = pipeline_load_analysis_data(DATA_PATH)
@@ -957,6 +1017,8 @@ def main() -> None:
         render_methods(profile, checks)
     elif page == "About the build":
         render_about(df)
+
+    render_brief_export(page, df, profile, checks)
 
 
 if __name__ == "__main__":

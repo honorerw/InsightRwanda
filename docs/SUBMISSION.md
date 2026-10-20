@@ -6,6 +6,8 @@ Read this before choosing between running the app and reviewing the screenshots 
 
 *All screenshots below are real captures of the running application (headless Chrome via the DevTools protocol, marker-verified per page).*
 
+**Take-away briefs:** every page also offers a one-page insight brief (PDF + PNG) via download buttons in the app, and committed copies live in `docs/briefs/` (`python scripts/build_briefs.py` regenerates them). Briefs are aggregate-only — no household records, no gated exports — with an explicit "what this brief cannot claim" panel.
+
 ---
 
 ## 1. What to run locally
@@ -22,7 +24,7 @@ The app opens on **Overview** and loads the supplied Stata source directly from 
 To re-verify before judging (optional, ~5 s):
 
 ```bash
-python -m unittest discover -s tests        # 26/26 pass
+python -m unittest discover -s tests        # 39/39 pass
 python scripts/walkthrough_app.py           # headless render of all 9 pages
 python scripts/browser_render_check.py      # real-Chrome render + marker check
 ```
@@ -82,7 +84,7 @@ Why the access-vs-resilience framing is the actionable one, and how the prototyp
 
 | Check | Result |
 |---|---|
-| Unit tests (real source + synthetic fixtures + estimation) | 26/26 OK |
+| Unit tests (real source + synthetic fixtures + estimation + briefs) | 39/39 OK |
 | Headless page walkthrough (incl. filters, tabs) | 9/9 + 6/6 + tabs OK |
 | Real-browser render (Chrome/CDP, DOM + pixel check) | PASSED |
 | Data-quality checks on the source file | 0 FAIL |

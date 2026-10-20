@@ -3,7 +3,7 @@
 **Project:** InsightRwanda · Financial Inclusion & Poverty Research Analytics
 **Context:** NISR 2026 Big Data Hackathon — Track 2 (Financial Inclusion & Poverty Reduction in Rwanda)
 **Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18
-**Current state at documentation time:** 26/26 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract). Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
+**Current state at documentation time:** 39/39 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract) and the per-page briefs layer (one-page PDF/PNG exports). Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
 
 > Verified at a recent audit: SHA-256 `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae` · analysis version `financial_inclusion_135869b472e3`
 
@@ -233,7 +233,20 @@ Estimation layer (added 2026-10-19): interval estimates, income-band context est
 | `context_weight_distribution(frame, column)` | Weighted band distribution on embedded labels, DK/refusal excluded. |
 | `official_poverty_status(...)` | Code-enforced contract: lists exactly which of the six required inputs (poverty line, concept, welfare aggregate, variance documentation, authorization, publication approval) are missing. Nothing is inferred. |
 
-### 4.5 `research/catalog.py`
+### 4.5 `research/briefs.py`
+
+One-page, non-gated insight briefs (added 2026-10-20): each of the nine dashboard pages can export a single-page PNG and PDF summary of its own aggregates.
+
+| Component | Purpose |
+|---|---|
+| `build_page_brief(page, view, profile, checks)` | Builds the `PageBrief` (KPIs, narrative, caution panel, lens note, footer) for a named page from a loaded, enriched view. Unknown pages raise `ValueError`. |
+| `build_all_briefs(view, ...)` | All nine briefs at once (used by tests and `scripts/build_briefs.py`). |
+| `render_brief_png(brief)` / `render_brief_pdf(brief)` | Deterministic A4 @ 200 dpi renders via Pillow. The PDF embeds the same rendered page as the PNG, so brief text is an image, not selectable text. |
+| `brief_filenames(brief)` | Stable names, e.g. `brief_overview.pdf` / `brief_overview.png`. |
+
+Non-gated by construction: briefs contain only aggregate values produced by the existing estimators — no household identifiers, no raw records, no gated exports — and every brief repeats what its numbers cannot claim in a caution panel. In the app, `render_brief_export` adds a PDF/PNG download pair to each page reflecting the currently selected analysis lens. Committed copies: `docs/briefs/` (regenerate with `python scripts/build_briefs.py`).
+
+### 4.6 `research/catalog.py`
 
 Source inventory, reproducibility fingerprint and governance gates.
 
@@ -325,12 +338,14 @@ python -m unittest discover -s tests -v
 
 26 tests total (13 original + 13 estimation tests). Executed again after the estimation layer was added:
 
+- **Then extended to 39 tests** (13 brief tests added with the per-page briefs layer: content, weighted arithmetic, deterministic rendering, PNG/PDF validity, identifier exclusion). The earlier audit lines below are historical records of the states before that extension.
+
 - **Result (historical audit, superseded by the estimation round):** `Ran 13 tests in 3.357s. OK`, exit code 0 — **13/13 pass, fully green.**
 - **Previously failing (`test_source_errors_are_explicit`)** — root-cause tracked to `pandas.read_stata` raising `struct.error` on intentionally corrupted input; the exception tuple in `load_analysis_data` (`except (OSError, ValueError, EOFError, ImportError)`) did not include `struct.error`. Verified by direct reproduction, then **fixed** by importing `struct` and adding it to the caught exception tuple so corrupt inputs produce a clean `SourceLoadError` (matches the test's intended contract; no assertion was weakened).
 - **Side effect of the fix:** the `analysis_version` fingerprint naturally changed to `financial_inclusion_f43dfd9a140b` (its design behaviour: it re-fingerprints whenever research logic changes). The README's audit record was synced accordingly; the previous audit value was `financial_inclusion_135869b472e3`.
 - Additional polish applied in the same pass: `select_dtypes` updated to `include=["object", "str"]` to silence the pandas 4.0 `Pandas4Warning`, and "About the build" was wired into the sidebar navigation (previously dead code).
 
-> **Status:** fully green — 26/26 tests pass (original suite + estimation suite). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080`.
+> **Status:** fully green — 39/39 tests pass (original suite + estimation suite + briefs suite). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080`.
 
 ### Notable interpretation limit
 
