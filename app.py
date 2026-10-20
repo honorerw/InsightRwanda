@@ -74,6 +74,18 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 .block-container { max-width: 1480px; padding: 1.35rem 3.4rem 4.5rem; }
 .main .block-container { animation: rise-in .35s ease-out both; }
 @keyframes rise-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+/* Staggered entrances: cards cascade in while the whole page rises */
+.metric-card, .chart-card, .callout, .page-intro, .filter-shell { animation: rise-in .4s ease-out both; }
+.page-intro { animation-delay: .03s; }
+.filter-shell { animation-delay: .09s; }
+.chart-card { animation-delay: .12s; }
+.metric-card[data-delay="1"] { animation-delay: .07s; }
+.metric-card[data-delay="2"] { animation-delay: .14s; }
+.metric-card[data-delay="3"] { animation-delay: .21s; }
+/* Accessibility: honour the OS reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 
 [data-testid="stSidebar"] { background: linear-gradient(180deg, #123c36 0%, #1d5149 100%); border-right: 1px solid #2c6258; min-width: 276px; }
 [data-testid="stSidebar"] > div:first-child { padding: 1.1rem .95rem 1.4rem; }
@@ -271,9 +283,10 @@ def has_data(frame: pd.DataFrame) -> bool:
     return True
 
 
-def metric_card(label: str, value: str, foot: str, icon: str, color: str = "green") -> None:
+def metric_card(label: str, value: str, foot: str, icon: str, color: str = "green", delay: int = 0) -> None:
+    delay_attr = f' data-delay="{delay}"' if delay else ""
     st.markdown(
-        f'<div class="metric-card {color}"><div class="metric-top"><div class="metric-label">{label}</div><div class="metric-icon">{icon}</div></div><div class="metric-value">{value}</div><div class="metric-foot">{foot}</div></div>',
+        f'<div class="metric-card {color}"{delay_attr}><div class="metric-top"><div class="metric-label">{label}</div><div class="metric-icon">{icon}</div></div><div class="metric-value">{value}</div><div class="metric-foot">{foot}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -420,9 +433,9 @@ def render_overview(df: pd.DataFrame) -> None:
     pressure = weighted_rate(view, view["income_pressure"])
     m1, m2, m3, m4 = st.columns(4)
     with m1: metric_card("Active formal access", pct(active), "currently use a bank, digital, MFI, mobile money or SACCO channel", "↗", "green")
-    with m2: metric_card("Mobile money anchor", pct(mobile), "currently use a mobile money operator", "⌁", "green")
-    with m3: metric_card("Emergency buffer", pct(emergency), "have set aside rainy-day funds", "◌", "yellow")
-    with m4: metric_card("Income pressure", pct(pressure), "income does not cover living costs monthly or often", "!", "rose")
+    with m2: metric_card("Mobile money anchor", pct(mobile), "currently use a mobile money operator", "⌁", "green", delay=1)
+    with m3: metric_card("Emergency buffer", pct(emergency), "have set aside rainy-day funds", "◌", "yellow", delay=2)
+    with m4: metric_card("Income pressure", pct(pressure), "income does not cover living costs monthly or often", "!", "rose", delay=3)
 
     overview_tabs = st.tabs(["National signal", "Opportunity map", "Train & predict"])
     with overview_tabs[0]:
@@ -520,10 +533,10 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
     card_ids = ["FI-01", "FI-02", "FI-03", "FI-04"]
     cards = st.columns(4)
     card_styles = [("green", "↗"), ("green", "⌁"), ("yellow", "◌"), ("rose", "!")]
-    for slot, indicator_id, (color, icon) in zip(cards, card_ids, card_styles):
+    for index, (slot, indicator_id, (color, icon)) in enumerate(zip(cards, card_ids, card_styles)):
         result = results[indicator_id]
         with slot:
-            metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color)
+            metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color, delay=index)
 
     section_head("Financial inclusion evidence", "Weighted estimates from the supplied source · no survey-design standard errors are shown")
     left, right = st.columns([1.05, .95])
@@ -589,7 +602,7 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
     with a:
         metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
     with b:
-        metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow")
+        metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
 
     render_estimation_section(view)
     st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology. Source: supplied Stata dataset; release period not documented.</div>', unsafe_allow_html=True)
@@ -603,7 +616,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
         "Income-band context from the embedded Stata band labels · bootstrap intervals are NOT survey-design standard errors",
     )
     context_cards = st.columns(3)
-    for slot, estimate_id in zip(context_cards, CONTEXT_ESTIMATES):
+    for index, (slot, estimate_id) in enumerate(zip(context_cards, CONTEXT_ESTIMATES)):
         result = calculate_context_estimate(view, estimate_id)
         definition = result["definition"]
         with slot:
@@ -613,6 +626,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
                 f"weighted population {result['weight_sum']:,.0f}",
                 "≡" if estimate_id == "EI-02" else "≣",
                 "orange" if estimate_id == "EI-02" else "yellow",
+                delay=index,
             )
 
     band_tab, interval_tab, contract_tab = st.tabs(["Income-band detail", "Bootstrap intervals", "Official estimation contract"])
@@ -656,7 +670,12 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             columns=["Required input", "Status"],
         )
         st.dataframe(contract, hide_index=True, use_container_width=True, height=250)
-        st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly in <span class="mono">research/estimation.py::official_poverty_status</span> by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
+        preview_col, cta_col = st.columns([1, 1.4])
+        with preview_col:
+            if st.button("How can this be unlocked?", key="open_poverty_modal"):
+                official_poverty_contract_modal()
+        with cta_col:
+            st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly in <span class="mono">research/estimation.py::official_poverty_status</span> by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
 
 
 def render_regional(df: pd.DataFrame) -> None:
@@ -728,9 +747,9 @@ def render_resilience(df: pd.DataFrame) -> None:
     stress = weighted_rate(view, view["financial_stress"])
     c1, c2, c3, c4 = st.columns(4)
     with c1: metric_card("Priority households", pct(risk), "low on the four-component resilience lens", "!", "rose")
-    with c2: metric_card("Watch list", pct(watch), "partial resilience; programme targeting can make a difference", "◐", "yellow")
-    with c3: metric_card("Emergency feels difficult", pct(difficult), "say raising 56,000 Rwf would be difficult", "◌", "orange")
-    with c4: metric_card("Financial stress", pct(stress), "agree or sometimes feel financial stress", "≈", "rose")
+    with c2: metric_card("Watch list", pct(watch), "partial resilience; programme targeting can make a difference", "◐", "yellow", delay=1)
+    with c3: metric_card("Emergency feels difficult", pct(difficult), "say raising 56,000 Rwf would be difficult", "◌", "orange", delay=2)
+    with c4: metric_card("Financial stress", pct(stress), "agree or sometimes feel financial stress", "≈", "rose", delay=3)
 
     section_head("Resilience is a stack, not a single score", "Each component is shown separately so the intervention logic stays auditable")
     components = [
@@ -791,7 +810,12 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     if not has_data(view):
         return
     if not aggregate_release_allowed(profile):
-        st.markdown('<div class="callout"><strong>Aggregate explorer is governance-gated.</strong><br>No explicit authorization and disclosure/publication approval record is available for this source. The app will not produce an arbitrary filtered aggregate table or export until an authorised data steward supplies both approvals and an approved disclosure rule.</div>', unsafe_allow_html=True)
+        gate_col, why_col = st.columns([1.55, 1])
+        with gate_col:
+            st.markdown('<div class="callout"><strong>Aggregate explorer is governance-gated.</strong><br>No explicit authorization and disclosure/publication approval record is available for this source. The app will not produce an arbitrary filtered aggregate table or export until an authorised data steward supplies both approvals and an approved disclosure rule.</div>', unsafe_allow_html=True)
+        with why_col:
+            if st.button("Why is this withheld?", key="open_gate_modal"):
+                explorer_gate_modal(profile)
         data_footer(view, "Explorer view · output withheld")
         return
     left, right = st.columns([.7, 1.3])
@@ -831,9 +855,9 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
     summary = quality_summary(checks)
     c1, c2, c3, c4 = st.columns(4)
     with c1: metric_card("Checks passed", str(summary["PASS"]), "structural or traceability checks", "✓", "green")
-    with c2: metric_card("Warnings", str(summary["WARN"]), "requires review or qualification", "!", "yellow")
-    with c3: metric_card("Informational", str(summary["INFO"]), "measured, not scored", "i", "orange")
-    with c4: metric_card("Failures", str(summary["FAIL"]), "blocking structural checks", "×", "rose")
+    with c2: metric_card("Warnings", str(summary["WARN"]), "requires review or qualification", "!", "yellow", delay=1)
+    with c3: metric_card("Informational", str(summary["INFO"]), "measured, not scored", "i", "orange", delay=2)
+    with c4: metric_card("Failures", str(summary["FAIL"]), "blocking structural checks", "×", "rose", delay=3)
 
     section_head("Executed checks", "The findings below come from the loaded source, not synthetic fixture data")
     quality_table = pd.DataFrame([
@@ -934,6 +958,101 @@ def render_about(df: pd.DataFrame) -> None:
     st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
 
 
+def lens_signature(df: pd.DataFrame, page: str) -> str | None:
+    """Human-readable description of the active analysis lens (None = page has none)."""
+
+    prefix = LENS_PREFIXES.get(page)
+    if not prefix:
+        return None
+    province = st.session_state.get(f"{prefix}_province", "All provinces")
+    district = st.session_state.get(f"{prefix}_district", "All districts")
+    setting = st.session_state.get(f"{prefix}_setting", "All settings")
+    sex = st.session_state.get(f"{prefix}_sex", "All respondents")
+    parts = [part for part in (
+        None if province == "All provinces" else province,
+        None if district == "All districts" else district,
+        None if setting == "All settings" else setting,
+        None if sex == "All respondents" else sex,
+    ) if part]
+    lens_text = " · ".join(parts) if parts else "National view"
+    return f"{lens_text} · {len(df):,} records"
+
+
+def lens_toast(page: str, signature: str | None) -> None:
+    """Surface a quiet toast when the active analysis lens changes."""
+
+    if signature is None:
+        return
+    key = f"_lens_sig_seen_{page}"
+    previous = st.session_state.get(key)
+    st.session_state[key] = signature
+    if previous is not None and previous != signature:
+        st.toast(f"Lens updated — {signature}", icon="🔍")
+
+
+def kpi_countup() -> None:
+    """Animate the numeric part of every .metric-value from 0 to its value.
+
+    A silent-fallback enhancement: if the browser blocks the iframe→parent
+    access or prefers reduced motion, nothing happens and the static value
+    remains. Uses no external libraries and never touches research logic.
+    """
+
+    st.html(
+        r"""
+<script>
+(function () {
+  var doc;
+  try { doc = window.parent.document; } catch (e) { return; }
+  if (!doc || (doc.matchMedia && doc.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+  function parse(el) {
+    var text = el.textContent || '';
+    var m = text.match(/^(.*?)(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d)(.*)$/s);
+    if (!m) return null;
+    var target = parseFloat(m[2].replace(/,/g, ''));
+    if (!isFinite(target)) return null;
+    var decimals = (m[2].split('.')[1] || '').length;
+    return { el: el, prefix: m[1], target: target, suffix: m[3], decimals: decimals, raw: m[2] };
+  }
+  function ease(t) { return 1 - Math.pow(1 - t, 3); }
+  function animate(item) {
+    var start = null;
+    var duration = 650;
+    function frame(ts) {
+      if (!start) start = ts;
+      var t = Math.min((ts - start) / duration, 1);
+      var value = item.target * ease(t);
+      var shown = value.toFixed(item.decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      item.el.textContent = item.prefix + shown + item.suffix;
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  var nodes = doc.querySelectorAll('.metric-value');
+  var items = [];
+  for (var i = 0; i < nodes.length; i++) {
+    var parsed = parse(nodes[i]);
+    if (parsed) items.push(parsed);
+  }
+  if (!('IntersectionObserver' in window.parent)) {
+    items.forEach(animate);
+    return;
+  }
+  var observer = new window.parent.IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      var found = null;
+      for (var i = 0; i < items.length; i++) if (items[i].el === entry.target) found = items[i];
+      if (found) { animate(found); observer.unobserve(entry.target); }
+    });
+  }, { threshold: 0.4 });
+  items.forEach(function (item) { observer.observe(item.el); });
+})();
+</script>
+""",
+    )
+
+
 def _lens_view(df: pd.DataFrame, page: str) -> pd.DataFrame:
     """Reapply the active page's filter-bar lens (without re-rendering widgets)."""
 
@@ -953,6 +1072,75 @@ def _lens_view(df: pd.DataFrame, page: str) -> pd.DataFrame:
     )
 
 
+@st.dialog("Official poverty estimation — unlock contract", width="large")
+def official_poverty_contract_modal() -> None:
+    status = official_poverty_status()
+    st.markdown(
+        "<p class='section-note'>A data steward unlocks the official estimate only by supplying every "
+        "input below explicitly in <span class='mono'>research/estimation.py::official_poverty_status</span> "
+        "— nothing is inferred or defaulted. The app blocks this on purpose: a poverty rate without a "
+        "documented line, aggregate and variance method would be fabrication.</p>",
+        unsafe_allow_html=True,
+    )
+    contract = pd.DataFrame(
+        [(req, "missing — estimation blocked") for req in status.missing],
+        columns=["Required input", "Status"],
+    )
+    if status.supplied:
+        for name, value in status.supplied.items():
+            contract = pd.concat([contract, pd.DataFrame([[name, f"supplied: {value}"]], columns=contract.columns)], ignore_index=True)
+    st.dataframe(contract, hide_index=True, width="stretch")
+    st.markdown(
+        "<div class='callout'><strong>State.</strong> " + ("All six inputs supplied — estimation can run." if status.ready else f"{len(status.missing)} of 6 inputs still missing.") + "</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button("Close", key="modal_close_poverty"):
+        return
+
+
+@st.dialog("Why the explorer withholds aggregates", width="large")
+def explorer_gate_modal(profile: SourceProfile) -> None:
+    released = aggregate_release_allowed(profile)
+    st.markdown(
+        f"<p class='section-note'>The gate is coded, tested software — not a disclaimer. "
+        "<span class='mono'>aggregate_release_allowed()</span> returns <span class='mono'>True</span> only when both "
+        "the authorization record and the publication record begin with \"Approved\". Current state:</p>",
+        unsafe_allow_html=True,
+    )
+    st.dataframe(pd.DataFrame([
+        ["Authorization record", profile.authorization_status],
+        ["Publication record", profile.publication_status],
+        ["Gate state", "Open" if released else "Closed — household preview, raw export and aggregate tables withheld"],
+    ], columns=["Requirement", "Status"]), hide_index=True, width="stretch")
+    st.markdown(
+        "<div class='callout'><strong>What unlocks it.</strong> An authorized data steward records both "
+        "approvals plus an approved disclosure rule in the source profile. Until then, page-level "
+        "evidence is shared through the one-page briefs below — aggregate-only by construction.</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button("Close", key="modal_close_explorer"):
+        return
+
+
+@st.dialog("Brief preview — what the export contains", width="large")
+def brief_preview_modal(brief, names: dict[str, str]) -> None:
+    st.markdown(f"<div class='eyebrow'>{brief.eyebrow} · {brief.lens_note}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='section-title'>{brief.narrative}</div><p class='section-note' style='font-size:.84rem'>{brief.caution}</p>", unsafe_allow_html=True)
+    st.dataframe(
+        pd.DataFrame(brief.kpis, columns=["Value", "Figure", "Detail"]),
+        hide_index=True,
+        width="stretch",
+        height=min(460, 39 * max(len(brief.kpis), 2) + 38),
+    )
+    st.markdown(
+        "<p class='section-note'>Use the download buttons below the preview. The brief is aggregate-only: "
+        "no household records, no gated exports — safe to share with judges and partners.</p>",
+        unsafe_allow_html=True,
+    )
+    if st.button("Close", key="modal_close_brief"):
+        return
+
+
 def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
     """One non-gated, take-away brief for this page: aggregate-only PNG + one-page PDF."""
 
@@ -964,22 +1152,25 @@ def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, che
         return
     names = brief_filenames(brief)
     pdf_bytes, png_bytes = render_brief_pdf(brief), render_brief_png(brief)
-    left, right = st.columns(2)
-    with left:
+    preview_col, pdf_col, png_col = st.columns([.9, 1.05, 1.05])
+    with preview_col:
+        if st.button("Preview first", key="open_brief_modal"):
+            brief_preview_modal(brief, names)
+    with pdf_col:
         st.download_button(
             "Download one-page brief (PDF)",
             data=pdf_bytes,
             file_name=names["pdf"],
             mime="application/pdf",
-            use_container_width=True,
+            width="stretch",
         )
-    with right:
+    with png_col:
         st.download_button(
             "Download one-page brief (PNG)",
             data=png_bytes,
             file_name=names["png"],
             mime="image/png",
-            use_container_width=True,
+            width="stretch",
         )
     st.markdown(
         '<div class="footer-note">The brief is built from aggregate values only — no household records, exports or edit of the source. It reflects the analysis lens currently selected above.</div>',
@@ -1019,6 +1210,8 @@ def main() -> None:
         render_about(df)
 
     render_brief_export(page, df, profile, checks)
+    lens_toast(page, lens_signature(_lens_view(df, page), page))
+    kpi_countup()
 
 
 if __name__ == "__main__":

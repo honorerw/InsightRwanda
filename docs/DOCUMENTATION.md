@@ -297,6 +297,18 @@ Streamlit presentation layer (~890 lines) with custom brand styling, custom side
 | `weighted_group(frame, group, measure)` / `weighted_distribution(frame, category)` | Per-group weighted bar data + weighted category mix. |
 | `has_data`, `data_footer`, `filter_bar`, `section_head`, `metric_card`, `chart_theme`, `app_header`, `nav`, `page_intro` | Reusable UI primitives. |
 | `filter_bar` | Province + district + setting + respondent filter shell, wrapped around `pipeline_filter_analysis_data`. |
+| `lens_signature` / `lens_toast` | Describes the active lens and raises a quiet `st.toast` when it changes (added 2026-10-20). |
+| `kpi_countup()` | Animate numeric `.metric-value` text from 0 to its value on scroll (silent fallback, `prefers-reduced-motion` respected; added 2026-10-20). |
+
+### Modals and motion (added 2026-10-20)
+
+Three native `@st.dialog` modals, opened via in-page buttons:
+
+- **Poverty unlock contract** (`official_poverty_contract_modal`, Poverty insights → "How can this be unlocked?") — the missing-inputs contract in one overlay.
+- **Explorer gate** (`explorer_gate_modal`, Data explorer → "Why is this withheld?") — the gate rule and current governance state.
+- **Brief preview** (`brief_preview_modal`, every page → "Preview first") — the page brief's KPIs and caution panel before downloading.
+
+Motion design: staggered card entrances (`metric-card exercise data-delay`, `chart-card`/`filter-shell`/`page-intro` CSS delays), all CSS-only, plus a global `@media (prefers-reduced-motion: reduce)` guard that disables every animation for users (and judges) who request it. No `data-testid` selectors are used for motion, so Streamlit internals can change without breaking the visuals.
 
 ### Exploratory "Train & predict" model (Overview tab)
 
