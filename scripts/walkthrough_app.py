@@ -32,11 +32,13 @@ PAGES = [
 ]
 
 
-def visit(page: str):
+def visit(page: str, source: str | None = None):
     """Render one page in a fresh AppTest session with the nav pre-selected."""
 
     at = st_test.AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
     at.session_state["workspace_nav"] = page
+    if source is not None:
+        at.session_state["analysis_source"] = source
     at.run()
     return at
 
@@ -86,7 +88,33 @@ def main() -> int:
         if apply_filter_lens(at, page) and not report(f"{page} · Kigali/Urban/Female", at):
             failures.append(f"{page} (filtered)")
 
-    print("Phase 3 — Overview tab structure")
+    print("Phase 4 — SPSS second source: every page renders with honest degradation")
+    for page in PAGES:
+        at = visit(page, source="spss")
+        if not report(f"{page} (spss source)", at):
+            failures.append(f"{page} (spss)")
+
+    print("Phase 5 — SPSS degradation honesty markers")
+    at = visit("Resilience lab", source="spss")
+    marker_ok = not at.exception and any(
+        "not reproducible" in (md.value or "").lower() for md in at.markdown
+    )
+    if marker_ok:
+        print("  OK    Resilience lab (spss) shows the withheld-not-reproducible callout")
+    else:
+        failures.append("Resilience lab (spss) honesty marker")
+        print("  FAIL  Resilience lab (spss) missing the not-reproducible callout")
+    at = visit("Financial inclusion", source="spss")
+    withheld_ok = not at.exception and any(
+        "not reproducible" in (md.value or "").lower() for md in at.markdown
+    )
+    if withheld_ok:
+        print("  OK    Financial inclusion (spss) shows the withheld indicator cards")
+    else:
+        failures.append("Financial inclusion (spss) honesty marker")
+        print("  FAIL  Financial inclusion (spss) missing withheld indicator markers")
+
+    print("Phase 6 — Overview tab structure")
     at = visit("Overview")
     if at.exception:
         failures.append("Overview tabs")

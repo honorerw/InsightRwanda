@@ -2,13 +2,14 @@
 
 InsightRwanda is a Streamlit research and analytics platform for the NISR 2026 Big Data Hackathon, focused on Financial Inclusion & Poverty Reduction in Rwanda.
 
-The application is connected to the supplied `data/dataset.dta` source. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
+The application is connected to **two supplied sources**: the master `data/dataset.dta` (Stata, 13,994 households) and the second source `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, 12,480 individual respondents). A sidebar selector switches between them; where the second source lacks a label-verified counterpart, the app shows explicit "not reproducible" cards instead of approximating. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
 
 ## What is implemented
 
 - Custom branded Streamlit sidebar and navigation with the default header, footer and toolbar hidden.
-- Real Stata loading through `research/data_pipeline.py`.
+- Real Stata loading through `research/data_pipeline.py` and second-source SPSS loading through `research/spss_pipeline.py` (label-verified alias mapping onto the master schema; `pyreadstat`).
 - A documented 94-variable analytical slice from the 2,442-variable source file.
+- A sidebar source selector with honest per-page degradation on the SPSS source and a cross-source agreement table (same indicator rules applied to both supplied files, no merging).
 - Structural data-quality checks for schema, row count, identifier uniqueness, weights, codes, geographic consistency and missingness.
 - Verified financial-inclusion indicators using embedded Stata variable labels:
   - active formal financial access;
@@ -24,7 +25,7 @@ The application is connected to the supplied `data/dataset.dta` source. It does 
 - One-page, non-gated insight brief for every page (PDF + PNG) — download buttons in the app and committed copies in `docs/briefs/`; aggregate values only, no household records.
 - A dedicated Predictive insights page: candidate comparison under group-stratified cross-validation, held-out scorecard, threshold trade-off analysis and subgroup model performance with low-evidence flags.
 - Methods, source profile, governance status and evidence-chain pages.
-- Real-source tests in `tests/test_real_pipeline.py` plus estimation and brief test suites.
+- Real-source tests in `tests/test_real_pipeline.py` plus estimation, brief, and second-source SPSS suites (including a synthetic `.sav` fixture and a real 12,480-row integration test).
 
 ## Run locally
 

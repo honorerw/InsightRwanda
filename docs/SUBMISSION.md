@@ -19,13 +19,13 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app opens on **Overview** and loads the supplied Stata source directly from `data/dataset.dta` — read-only, nothing to configure, no API keys. The left rail is a grouped, numbered nav system (Evidence / Governance / How it is built) that matches each page's `0N /` eyebrow; the interface uses an Inter / Lora / JetBrains Mono webfont stack with offline fallbacks.
+The app opens on **Overview** and loads the active source directly (read-only, nothing to configure, no API keys). The sidebar **Source** selector switches between the two supplied datasets — `data/dataset.dta` (master, 13,994 households) and `data/Rwanda FinScope 2020_Final Data.sav` (second source, 12,480 individual respondents). On the SPSS source every page degrades honestly: indicators/components with no label-verified counterpart are shown as explicit "not reproducible" cards rather than approximated (see `docs/screenshots/*_spss.png`), and the Financial inclusion page carries a cross-source agreement table that applies the same indicator rules to both sources side by side. The left rail is a grouped, numbered nav system (Evidence / Governance / How it is built) that matches each page's `0N /` eyebrow; the interface uses an Inter / Lora / JetBrains Mono webfont stack with offline fallbacks.
 
 To re-verify before judging (optional, ~5 s):
 
 ```bash
-python -m unittest discover -s tests        # 52/52 pass
-python scripts/walkthrough_app.py           # headless render of all 10 pages
+python -m unittest discover -s tests        # 62/62 pass (incl. the synthetic .sav + real SPSS integration)
+python scripts/walkthrough_app.py           # headless render of all 10 pages under both sources
 python scripts/browser_render_check.py      # real-Chrome render + marker check
 ```
 
@@ -84,11 +84,11 @@ Why the access-vs-resilience framing is the actionable one, and how the prototyp
 
 | Check | Result |
 |---|---|
-| Unit tests (real source + synthetic fixtures + estimation + briefs + modeling + page artifacts) | 52/52 OK |
-| Headless page walkthrough (incl. filters, tabs) | 10/10 + 7/7 + tabs OK |
-| Real-browser render (Chrome/CDP, DOM + pixel check) | PASSED |
-| Data-quality checks on the source file | 0 FAIL |
-| Screenshots in this guide | 10/10 pages, marker-verified |
+| Unit tests (real source + synthetic fixtures + SPSS second source + estimation + briefs + modeling + page artifacts) | 62/62 OK |
+| Headless page walkthrough (incl. filters, tabs) | 10/10 master + 10/10 SPSS + 7/7 filtered + honest-degradation markers + tabs OK |
+| Real-browser render (Chrome/CDP, DOM + pixel check) | PASSED — incl. 3 SPSS pages with degraded-marker verification in the live DOM |
+| Data-quality checks on the source file | 0 FAIL (both sources use the same check layer) |
+| Screenshots in this guide | 10/10 pages + 3 SPSS degradation captures, marker-verified |
 
 ## 5. Deliberate boundaries
 

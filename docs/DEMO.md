@@ -33,7 +33,7 @@ Everything below is live in the shipped app (`streamlit run app.py`) — no stub
 3. **The evidence chain** — SHA-256 + `analysis_version` fingerprint, indicator contract (FI-01…06), visible denominators, bootstrap intervals labelled *not* design SEs.
 4. **Integrity as a feature** — the refused poverty estimate + the six-input unlock contract in code; screenshot of the gate modal.
 5. **From evidence to action** — district drill-down map cue, resilience-lens priority share, the three action prompts (buffer / assisted digital / shock-responsive finance).
-6. **Verification** — Test suite: 52/52 tests, walkthrough: 10/10 pages, 10/10 screenshots, real-browser render check, 0 data-quality failures. Governance gate enforces exports in code.
+6. **Verification** — Test suite: 62/62 tests, walkthrough: all 10 pages under both supplied sources, 10/10 master screenshots + 3 SPSS degradation captures, real-browser render check, 0 data-quality failures. Governance gate enforces exports in code.
 7. **Ask** — What unlocks next: NISR's six official-poverty inputs; authorization + disclosure rule for aggregates; PSU/strata/variance documentation for design SEs.
 
 Mapping to the published judging criteria lives in `docs/COMPETITION_SUMMARY.md` ("Judging criteria alignment"); slide 6 is the tangible-impact slide, slide 7 is the problem-relevance closer.

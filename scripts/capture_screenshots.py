@@ -73,6 +73,25 @@ CLICK_JS = """
 })()
 """
 
+# Select the SPSS source radio option in the sidebar, then verify the degraded
+# pages really render their honesty markers in the live DOM.
+def radio_click_js() -> str:
+    return """
+(() => {
+  const options = document.querySelectorAll('[data-testid="stSidebar"] [role="radio"], [data-testid="stSidebar"] [role="radiogroup"] label');
+  const hit = Array.from(options).find(o => o.innerText.includes('FinScope 2020 SPSS'));
+  if (!hit) return 'RADIO_NOT_FOUND';
+  hit.click();
+  return 'RADIO_CLICKED';
+})()
+"""
+
+SPSS_PAGES: list[tuple[str, str, str]] = [
+    ("Financial inclusion", "Verified indicators, connected", "not reproducible"),
+    ("Resilience lab", "most exposed to the next shock", "not reproducible"),
+    ("Methods & sources", "traceable route", "FinScope"),
+]
+
 
 def slug(nav: str) -> str:
     return nav.lower().replace(" & ", "_").replace(" ", "_") or nav
@@ -134,10 +153,47 @@ async def main() -> int:
                 failures.append(nav)
             print(f"  {status}  {nav}: rendered={rendered}, screenshot={size_kb} KB -> {out.name} (click: {click_note})")
 
+        # SPSS second source: switch the source radio, then capture the pages
+        # that degrade and verify their honesty markers in the live DOM.
+        result = await call("Runtime.evaluate", {"expression": radio_click_js(), "returnByValue": True})
+        radio_note = result["result"].get("result", {}).get("value", "no-result")
+        await asyncio.sleep(6)  # let the source switch rerun before driving nav
+        for nav, marker, degraded_marker in SPSS_PAGES:
+            rendered = False
+            click_note = "no-result"
+            for attempt in range(2):  # retry once: sidebar buttons re-render on switch
+                buttons = await call(
+                    "Runtime.evaluate",
+                    {"expression": CLICK_JS % (len(PAGES), len(PAGES), [p for p, _m in PAGES].index(nav), [p for p, _m in PAGES].index(nav)), "returnByValue": True},
+                )
+                click_note = buttons["result"].get("result", {}).get("value", "no-result")
+                await asyncio.sleep(2)
+                deadline = time.monotonic() + 90  # covers cold master-cache loads once
+                while time.monotonic() < deadline:
+                    await poll_text()
+                    text = _state.get("text", "")
+                    if marker in text and degraded_marker in text and "Running" not in text[:120]:
+                        rendered = True
+                        break
+                    await asyncio.sleep(2)
+                if rendered:
+                    break
+                print(f"      retry {nav} · spss (attempt {attempt + 1})")
+            await asyncio.sleep(3)
+            shot = await call("Page.captureScreenshot", {"captureBeyondViewport": True, "format": "png"})
+            png_bytes = base64.b64decode(shot["result"]["data"])
+            out = SHOTS / f"{slug(nav)}_spss.png"
+            out.write_bytes(png_bytes)
+            size_kb = len(png_bytes) // 1024
+            status = "OK" if rendered and size_kb > 60 else "FAIL"
+            if status == "FAIL":
+                failures.append(f"{nav} (spss)")
+            print(f"  {status}  {nav} · spss: rendered={rendered}, screenshot={size_kb} KB -> {out.name} (radio: {radio_note}, click: {click_note})")
+
     if failures:
         print(f"\nCAPTURE FAILED for: {failures}")
         return 1
-    print(f"\nCAPTURE PASSED: {len(PAGES)}/{len(PAGES)} pages.")
+    print(f"\nCAPTURE PASSED: {len(PAGES)}/{len(PAGES)} pages + {len(SPSS_PAGES)}/{len(SPSS_PAGES)} SPSS degradation captures.")
     return 0
 
 

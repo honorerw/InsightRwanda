@@ -16,7 +16,7 @@
 3. [Architecture Overview](#3-architecture-overview)
 4. [Module Reference — `research/`](#4-module-reference--research)
 5. [Dashboard Reference — `app.py`](#5-dashboard-reference--apppy)
-6. [Data Source](#6-data-source)
+6. [Data Sources](#6-data-sources)
 7. [Verification & Limitations](#7-verification--limitations)
 8. [Governance Boundaries](#8-governance-boundaries)
 
@@ -56,11 +56,13 @@ InsightRwanda/
 │   ├── quality.py                # Structural + analytical-slice quality checks
 │   └── catalog.py                # Source profile, SHA-256, governance gates
 ├── tests/
-│   └── test_real_pipeline.py     # 13 real-source + synthetic-fixture tests
+│   ├── test_real_pipeline.py     # 13 real-source + synthetic-fixture tests
+│   └── test_spss_pipeline.py     # 10 tests incl. a synthetic .sav + real SPSS integration
 ├── data/
-│   └── dataset.dta               # Supplied NISR Stata source (READ-ONLY input)
+│   ├── dataset.dta               # Supplied NISR Stata source (READ-ONLY input)
+│   └── Rwanda FinScope 2020_Final Data.sav  # Supplied SPSS source (READ-ONLY input)
 ├── 2026 Hackathon Competition.pdf # Scope reference (READ-ONLY input)
-├── requirements.txt               # streamlit, pandas, numpy, plotly
+├── requirements.txt               # streamlit, pandas, numpy, plotly, pyreadstat
 ├── README.md                      # Project-level summary + reproducibility record
 └── docs/
     └── DOCUMENTATION.md          # This document
@@ -84,6 +86,18 @@ InsightRwanda/
             │  aggregate_weighted_measure() → explorer table│
             └───────────┬──────────────────────┬────────────┘
                         │                      │
+data/Rwanda FinScope    │                      ▼
+2020_Final Data.sav     │        ┌──────────────────────────┐
+(documented subset)     │        │ research/quality.py      │
+        │               │        │ run_quality_checks()     │
+        ▼               │        │ → PASS/WARN/INFO/FAIL    │
+┌───────────────────────┴───┐    └──────────────────────────┘
+│ research/spss_pipeline.py │
+│  load_spss_analysis_data   │
+│  enrich_spss_analysis_data │
+│  build_spss_profile()      │
+└───────────┬───────────────┘
+            │ (alias-mapped onto the master schema)
                         ▼                      ▼
         ┌───────────────────────┐    ┌──────────────────────────┐
         │ research/indicators.py│    │ research/quality.py      │
@@ -97,10 +111,12 @@ InsightRwanda/
                                     ▼
             ┌───────────────────────────────────────────────┐
             │ app.py (Streamlit presentation layer)         │
+            │ Source: dataset.dta master or SPSS second     │
             │ Pages: Overview · Financial inclusion ·       │
             │ Poverty insights · Geographic insights ·      │
-            │ Resilience lab · Data quality ·               │
-            │ Data explorer · Methods & sources             │
+            │ Resilience lab · Predictive insights ·        │
+            │ Data quality · Data explorer ·                │
+            │ Methods & sources                             │
             └───────────────────────────────────────────────┘
 
             research/catalog.py  (parallel track)
@@ -266,7 +282,20 @@ One-page, non-gated insight briefs (added 2026-10-20): each of the nine dashboar
 
 Non-gated by construction: briefs contain only aggregate values produced by the existing estimators — no household identifiers, no raw records, no gated exports — and every brief repeats what its numbers cannot claim in a caution panel. In the app, `render_brief_export` adds a PDF/PNG download pair to each page reflecting the currently selected analysis lens. Committed copies: `docs/briefs/` (regenerate with `python scripts/build_briefs.py`).
 
-### 4.6 `research/catalog.py`
+### 4.6 `research/spss_pipeline.py`
+
+Second-source SPSS pipeline mirroring `data_pipeline.py`'s rules (added 2026-10-23; see §6.2 for source facts).
+
+| Component | Purpose |
+|---|---|
+| `SPSS_COLUMNS` | The documented subset of the .sav file that is loaded — everything else stays out of the analytical frame. |
+| `_RENAME` / `_ALIASES` | SPSS names → master-schema names; `_ALIASES` holds the label-verified concept aliases (QF5 current-use → `qf4_*`, `EF9 → e9b`). |
+| `load_spss_analysis_data(path)` | `pyreadstat.read_sav` on the documented subset, empty-string→NaN masking, code maps for province/district/setting/sex, `head_sex` from `B0`. Raises `SpssLoadError` on undocumented shapes; never writes. |
+| `enrich_spss_analysis_data(frame)` | Derived columns over the alias-mapped names using the master pipeline's `yes`/`any_yes` validity rules. Withheld components (resilience lens, financial stress, income bands, FI-04) are deliberately absent. |
+| `build_spss_profile(path)` | Same `SourceProfile` structure as the master (`catalog.SourceProfile`, extended with `mapped_variables` / `psu_documented`) so every governance gate and Methods view works uniformly. |
+| `SPSS_SUPPORTED` / `SPSS_WITHHELD` | Positive and negative capability contracts pages use for honest degradation. |
+
+### 4.7 `research/catalog.py`
 
 Source inventory, reproducibility fingerprint and governance gates.
 
@@ -346,16 +375,31 @@ The page inherits the Overview's lens filter behaviour (prefix `predictive`) and
 
 ---
 
-## 6. Data Source
+## 6. Data Sources
+
+### 6.1 Master — `data/dataset.dta` (Stata, READ-ONLY)
 
 - **File:** `data/dataset.dta` (Stata `.dta`, READ-ONLY input).
-- **Rows:** 13,994.
+- **Rows:** 13,994 (households).
 - **Source variables:** 2,442 (inventoried, not loaded).
 - **Analytical slice:** 94 documented source variables plus derived columns.
 - **SHA-256:** `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae`.
 - **Weights present:** `hh_wt` (household), `pop_wt` (population).
 - **Metadata source:** embedded Stata variable/value labels (no external codebook supplied).
 - **Not documented in the workspace:** source release, population period, sampling methodology, strata/PSU/variance design, poverty line, welfare aggregate, authorization record, publication approval.
+
+### 6.2 Second source — `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, READ-ONLY)
+
+- **Rows:** 12,480 — the row unit is the **individual respondent** (`KEY` repeats across household members).
+- **Source variables:** 1,314 (inventoried; a documented subset is loaded).
+- **Loader:** `research/spss_pipeline.py` reads only its documented `SPSS_COLUMNS` subset via `pyreadstat.read_sav` and renames it onto the master frame schema — one source of coding rules (`yes` / `any_yes`) serves both sources, so no second interpretation of the codes can appear.
+- **Verified aliases** (label-identical semantics): `QF5_01..05 → qf4_01/03/04/05/06` (current use; QF4 on this file means *registered in own name*, never conflated), `EF9 → e9b`, `C14A4 → c14_5`, `EF7 → e7`; geography/setting/sex/PSU (`A1`, `A2`, `A3`, `B2`, `NUMVILL`) map unchanged.
+- **PSU** is documented on this source (`NUMVILL`) — unlike the master — but strata/variance documentation still is not.
+- **Not reproducible on this source** (withheld, never imputed): the digital-bank channel (master `qf4_02`) — FI-01's union runs over the five present channels; `e9c`, `e6`, `e2a`, `e2c`, `i4a`, `i9a`, `g11a`, `n11`/`n12` — so FI-04, financial stress, three resilience-lens components, the resilience band and the predictive model are **not reproducible** here, and every page degrades to an explicit "not reproducible" card instead of approximating.
+- **Cross-source agreement:** the Financial inclusion page has an expander that loads *both* sources through their own pipelines and applies the shared indicator rules to each side (no merging). On the real files: FI-01 92.0% vs 89.6%, FI-02 95.9% vs 94.6%, FI-03 21.3% vs 27.9%, FI-04 master-only, FI-05 80.2% vs 77.7%, FI-06 14.1% vs 19.5% — differences reflect the different question filters and row units, not errors.
+- **Metadata source:** embedded SPSS variable/value labels (no external codebook supplied). Authorization and publication status remain undocumented, identical to the master.
+
+Real-indicator differences (row units differ) are surfaced in a cross-source agreement table on the Financial inclusion page rather than merged.
 
 ---
 

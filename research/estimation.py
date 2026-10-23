@@ -107,8 +107,21 @@ def weighted_bootstrap_ci(
     n_boot). Raises for unknown indicators or missing required columns.
     """
 
-    values = indicator_value(frame, indicator_id).to_numpy(dtype=float)
-    weights = frame["hh_wt"]
+    try:
+        values = indicator_value(frame, indicator_id).to_numpy(dtype=float)
+    except KeyError as exc:
+        # A second source may lack the indicator's columns; surface the same
+        # ValueError contract the indicator layer uses so callers and pages
+        # degrade honestly instead of crashing.
+        raise ValueError(
+            f"Indicator {indicator_id} cannot be computed on this frame: missing column {exc}"
+        ) from exc
+    try:
+        weights = frame["hh_wt"]
+    except KeyError as exc:
+        raise ValueError(
+            f"Indicator {indicator_id} needs the household weight column hh_wt, which is absent"
+        ) from exc
     valid = (~np.isnan(values)) & weights.notna().to_numpy() & (weights > 0).to_numpy() & np.isfinite(weights).to_numpy()
     clean_values = values[valid]
     clean_weights = weights[valid].to_numpy(dtype=float)

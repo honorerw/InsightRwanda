@@ -7,6 +7,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from research.catalog import SourceProfile, aggregate_release_allowed, build_source_profile
+from research.spss_pipeline import (
+    SPSS_SOURCE_ID,
+    build_spss_profile,
+    enrich_spss_analysis_data as pipeline_enrich_spss_data,
+    load_spss_analysis_data as pipeline_load_spss_data,
+)
 from research.data_pipeline import (
     ANALYSIS_COLUMNS as PIPELINE_COLUMNS,
     PROVINCES,
@@ -45,6 +51,21 @@ from research.quality import QualityCheck, quality_summary, run_quality_checks
 
 APP_DIR = Path(__file__).resolve().parent
 DATA_PATH = APP_DIR / "data" / "dataset.dta"
+SPSS_PATH = APP_DIR / "data" / "Rwanda FinScope 2020_Final Data.sav"
+
+SOURCE_OPTIONS = (
+    ("master", "dataset.dta (master) · 13,994 households"),
+    ("spss", "FinScope 2020 SPSS · 12,480 patterns"),
+)
+SOURCE_LABELS = {
+    "master": "dataset.dta (master Stata source)",
+    "spss": "Rwanda FinScope 2020_Final Data.sav (SPSS source)",
+}
+SOURCE_SOURCE_IDs = {"master": "supplied_dataset_dta", "spss": SPSS_SOURCE_ID}
+
+
+def active_source() -> str:
+    return st.session_state.get("analysis_source", "master")
 
 st.set_page_config(
     page_title="InsightRwanda | Research Analytics",
@@ -218,12 +239,13 @@ def pct(value: float, decimals: int = 0) -> str:
 # -----------------------------------------------------------------------------
 def app_header() -> None:
     st.markdown(
-        """
+        f"""
         <div class="app-header">
           <div class="brand">
             <div class="brand-mark">◒</div>
             <div><div class="brand-name">InsightRwanda</div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
+          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> source: {SOURCE_LABELS[active_source()]}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -247,11 +269,23 @@ def nav(df: pd.DataFrame) -> str:
     current = st.session_state.get("workspace_nav", "Overview")
     if current not in nav_pages:
         current = "Overview"
+    current_source = st.session_state.get("analysis_source", "master")
     with st.sidebar:
         st.markdown(
             '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="side-label">Source</div>', unsafe_allow_html=True)
+        keys = [key for key, _label in SOURCE_OPTIONS]
+        labels = [label for _key, label in SOURCE_OPTIONS]
+        choice = st.radio(
+            "Source",
+            labels,
+            index=keys.index(current_source) if current_source in keys else 0,
+            key="analysis_source_widget",
+            label_visibility="collapsed",
+        )
+        st.session_state["analysis_source"] = keys[labels.index(choice)]
         for group_label, group_pages in nav_groups:
             st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
             for page in group_pages:
@@ -273,14 +307,20 @@ def page_intro(eyebrow: str, title: str, lede: str) -> None:
 
 def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
     st.markdown('<div class="filter-shell"><div class="filter-label">Analysis lens</div>', unsafe_allow_html=True)
+    # Keys are scoped per source so a source switch never leaves a stale value stuck.
+    tag = active_source()
+    if tag == "master":
+        sk = key_prefix
+    else:
+        sk = f"{key_prefix}_{tag}"
     c1, c2, c3, c4 = st.columns([1.05, 1.2, .9, .9])
     province_options = ["All provinces"] + sorted(PROVINCES.values())
-    province = c1.selectbox("Province", province_options, key=f"{key_prefix}_province")
+    province = c1.selectbox("Province", province_options, key=f"{sk}_province")
     pre = df if province == "All provinces" else df[df["province"].eq(province)]
     district_options = ["All districts"] + sorted(pre["district"].dropna().unique().tolist())
-    district = c2.selectbox("District", district_options, key=f"{key_prefix}_district")
-    setting = c3.selectbox("Setting", ["All settings", "Urban", "Rural"], key=f"{key_prefix}_setting")
-    sex = c4.selectbox("Respondent", ["All respondents", "Female", "Male"], key=f"{key_prefix}_sex")
+    district = c2.selectbox("District", district_options, key=f"{sk}_district")
+    setting = c3.selectbox("Setting", ["All settings", "Urban", "Rural"], key=f"{sk}_setting")
+    sex = c4.selectbox("Respondent", ["All respondents", "Female", "Male"], key=f"{sk}_sex")
     filtered = pipeline_filter_analysis_data(
         pre,
         district=None if district == "All districts" else district,
@@ -348,8 +388,9 @@ def weighted_distribution(frame: pd.DataFrame, category: str) -> pd.Series:
 
 
 def data_footer(frame: pd.DataFrame, label: str = "Filtered view") -> None:
+    source_name = SOURCE_SOURCE_IDs.get(active_source(), "unknown")
     st.markdown(
-        f'<div class="footer-note"><strong>{label}:</strong> {len(frame):,} unweighted records · weighted estimates use <span class="mono">hh_wt</span> · source: supplied NISR Stata dataset (<span class="mono">dataset.dta</span>). Figures are descriptive associations, not causal estimates.</div>',
+        f'<div class="footer-note"><strong>{label}:</strong> {len(frame):,} records in scope · weighted estimates use <span class="mono">hh_wt</span> · active source: <span class="mono">{source_name}</span>. Figures are descriptive associations, not causal estimates.</div>',
         unsafe_allow_html=True,
     )
 
@@ -530,6 +571,10 @@ def render_predictive_insights(df: pd.DataFrame) -> None:
     view = filter_bar(df, "predictive")
     if not has_data(view):
         return
+    if "resilience_band" not in view:
+        st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>The predictive workflow trains against the resilience band, and three of its four lens components (own money, saving behaviour, social support) have no label-verified counterpart on this source. Load the master Stata source to run the model readout; nothing is imputed here.</div>', unsafe_allow_html=True)
+        data_footer(view)
+        return
 
     render_model_evaluation_tab(view)
     record = evaluate_model_workload(view)
@@ -567,8 +612,10 @@ def render_overview(df: pd.DataFrame) -> None:
         with left:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
             st.markdown('<div class="section-title">Access is broad; buffers are thinner</div><div class="section-note">Share of respondents meeting each indicator</div>', unsafe_allow_html=True)
-            labels = ["Active formal access", "Mobile money", "Own money", "Saves", "Emergency fund", "Internet access"]
-            measures = ["active_access", "mobile_money", "owns_money", "saves_regularly", "emergency_fund", "internet_access"]
+            labels_available = [("Active formal access", "active_access"), ("Mobile money", "mobile_money"), ("Own money", "owns_money"), ("Saves", "saves_regularly"), ("Emergency fund", "emergency_fund"), ("Internet access", "internet_access")]
+            labels_available = [(label, m) for label, m in labels_available if m in view]
+            labels = [label for label, _m in labels_available]
+            measures = [m for _label, m in labels_available]
             values = [weighted_rate(view, view[m]) * 100 for m in measures]
             colors = ["#3155d4", "#5274e6", "#8ca4f0", "#c5d1fb", "#e5ae2f", "#de7c3f"]
             fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
@@ -578,13 +625,15 @@ def render_overview(df: pd.DataFrame) -> None:
             st.markdown('</div>', unsafe_allow_html=True)
         with right:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">A transparent composite of four observed capabilities</div>', unsafe_allow_html=True)
-            band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
-            fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
-            resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
-            fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Lora, Georgia, serif"))
-            st.plotly_chart(chart_theme(fig, 228), width="stretch", config={"displayModeBar": False})
-            st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
+            if "resilience_band" not in view:
+                st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">Not reproducible on this source: three of the four resilience-lens capabilities have no counterpart here. The mix is withheld rather than approximated.</div>', unsafe_allow_html=True)
+            else:
+                band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
+                fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
+                resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
+                fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Lora, Georgia, serif"))
+                st.plotly_chart(chart_theme(fig, 228), width="stretch", config={"displayModeBar": False})
+                st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
     with overview_tabs[1]:
@@ -600,30 +649,81 @@ def render_overview(df: pd.DataFrame) -> None:
     data_footer(view)
 
 
+def _indicator_results(view: pd.DataFrame) -> dict[str, object | None]:
+    """All six indicators where computable; None where the source cannot support a component."""
+
+    results: dict[str, object | None] = {}
+    for indicator_id in INDICATORS:
+        try:
+            results[indicator_id] = calculate_indicator(view, indicator_id)
+        except ValueError:
+            results[indicator_id] = None  # no label-verified counterpart on this source
+    return results
+
+
+def render_cross_source_agreement() -> None:
+    """Honest agreement view between the two supplied sources (cached loads)."""
+
+    with st.expander("Cross-source agreement — dataset.dta (master) vs FinScope 2020 SPSS", expanded=False):
+        st.caption(
+            "Both supplied sources are loaded through their own pipelines and the shared indicator rules are "
+            "applied to each. Differences can be real (different survey questions, filters and row units) — "
+            "this table reports agreement, it does not merge the sources."
+        )
+        rows = []
+        for indicator_id in INDICATORS:
+            row = {"ID": indicator_id, "Indicator": INDICATORS[indicator_id].title}
+            for tag, frame in (("master", load_master_frame()), ("spss", load_spss_workload(SPSS_PATH))):
+                try:
+                    result = calculate_indicator(frame, indicator_id)
+                    row[tag] = pct(result.estimate, 2)
+                except ValueError:
+                    row[tag] = "not reproducible"
+            rows.append(row)
+        agreement = pd.DataFrame(rows)
+        agreement["Both present"] = agreement.apply(
+            lambda r: r["master"] not in ("not reproducible",) and r["spss"] not in ("not reproducible",), axis=1
+        )
+        st.dataframe(agreement, hide_index=True, width="stretch", height=260)
+        st.caption("Row unit differs between sources (household vs individual). Weights differ. Treat large gaps as source-definition findings, not as errors.")
+
+
+@st.cache_data(show_spinner=False)
+def load_master_frame(path: Path = DATA_PATH) -> pd.DataFrame:
+    """Cached master frame for cross-source comparisons."""
+
+    return pipeline_enrich_analysis_data(pipeline_load_analysis_data(path))
+
+
 def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None:
     page_intro(
         "02 / Financial inclusion",
         "Verified indicators, connected to their source variables.",
-        "This page reports project-calculated estimates from the supplied Stata file. Every result has a definition, denominator, source-variable mapping and limitation so a research user can reproduce or challenge it.",
+        "This page reports project-calculated estimates from the active source. Every result has a definition, denominator, source-variable mapping and limitation so a research user can reproduce or challenge it.",
     )
     view = filter_bar(df, "financial_inclusion")
     if not has_data(view):
         return
-    results = {indicator_id: calculate_indicator(view, indicator_id) for indicator_id in INDICATORS}
+    results = _indicator_results(view)
     card_ids = ["FI-01", "FI-02", "FI-03", "FI-04"]
     cards = st.columns(4)
     card_styles = [("green", "↗"), ("green", "⌁"), ("yellow", "◌"), ("rose", "!")]
     for index, (slot, indicator_id, (color, icon)) in enumerate(zip(cards, card_ids, card_styles)):
         result = results[indicator_id]
         with slot:
-            metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color, delay=index)
+            if result is None:
+                metric_card(INDICATORS[indicator_id].title, "—", "not reproducible on this source", "⊘", "rose", delay=index)
+            else:
+                metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color, delay=index)
 
-    section_head("Financial inclusion evidence", "Weighted estimates from the supplied source · no survey-design standard errors are shown")
+    section_head("Financial inclusion evidence", "Weighted estimates from the active source · no survey-design standard errors are shown")
+    available_chart = [i for i in INDICATORS if results[i] is not None]
+    chart_is_empty = not available_chart
     left, right = st.columns([1.05, .95])
     with left:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        names = [results[i].definition.title for i in INDICATORS]
-        values = [results[i].estimate * 100 for i in INDICATORS]
+        names = [results[i].definition.title for i in available_chart]
+        values = [results[i].estimate * 100 for i in available_chart]
         colors = ["#3155d4", "#5274e6", "#e5ae2f", "#de7c3f", "#d95362", "#7182a8"]
         fig = go.Figure(go.Bar(x=values, y=names, orientation="h", marker_color=colors, text=[f"{v:.1f}%" for v in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
         fig.update_xaxes(range=[0, 108], ticksuffix="%")
@@ -633,11 +733,18 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
     with right:
         selected = st.selectbox("Inspect indicator", list(INDICATORS), format_func=lambda x: f"{x} · {INDICATORS[x].title}", key="indicator_detail")
         result = results[selected]
-        definition = result.definition
-        st.markdown(
-            f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.18rem">{definition.title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
-            unsafe_allow_html=True,
-        )
+        if result is None:
+            missing_vars = ", ".join(INDICATORS[selected].source_variables)
+            st.markdown(
+                f'<div class="chart-card"><div class="eyebrow">{selected} · indicator card</div><div class="section-title" style="font-size:1.18rem">{INDICATORS[selected].title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{INDICATORS[selected].definition}</p><div class="callout"><strong>Not reproducible on the active source.</strong> No variable on this source carries the label-verified semantics of the documented source variable(s) <code>{missing_vars}</code>. This is a documented scope reduction: the estimate is withheld rather than approximated or imputed.</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            definition = result.definition
+            st.markdown(
+                f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.18rem">{definition.title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
+                unsafe_allow_html=True,
+            )
 
     section_head("Indicator registry", "The research contract behind the dashboard")
     registry = pd.DataFrame([
@@ -653,7 +760,11 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         for definition in INDICATORS.values()
     ])
     st.dataframe(registry, hide_index=True, width="stretch", height=315)
-    st.markdown(f'<div class="footer-note">Source profile: {profile.source_variables:,} variables in the original Stata file · {profile.rows:,} records loaded · release and population period are not documented in the supplied materials.</div>', unsafe_allow_html=True)
+    registry_footnote = f'Source profile: {profile.source_variables:,} variables in the original source file · {profile.rows:,} records loaded · release and population period are not documented in the supplied materials.'
+    st.markdown(f'<div class="footer-note">{registry_footnote}</div>', unsafe_allow_html=True)
+    if chart_is_empty:
+        st.markdown('<div class="footer-note">The active source cannot support any of the six documented indicators; the chart region above is intentionally empty rather than approximated.</div>', unsafe_allow_html=True)
+    render_cross_source_agreement()
 
 
 def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
@@ -676,13 +787,20 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
     view = filter_bar(df, "poverty_context")
     if not has_data(view):
         return
-    pressure = calculate_indicator(view, "FI-05")
-    difficulty = calculate_indicator(view, "FI-04")
+    pressure_results = _indicator_results(view)
+    pressure = pressure_results["FI-05"]
+    difficulty = pressure_results["FI-04"]
     a, b = st.columns(2)
     with a:
-        metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
+        if pressure is None:
+            metric_card("Income pressure", "—", "not reproducible on this source", "⊘", "rose")
+        else:
+            metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
     with b:
-        metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
+        if difficulty is None:
+            metric_card("Emergency money is difficult", "—", "not reproducible on this source", "⊘", "rose", delay=1)
+        else:
+            metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
 
     render_estimation_section(view)
     st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology. Source: supplied Stata dataset; release period not documented.</div>', unsafe_allow_html=True)
@@ -697,40 +815,50 @@ def render_estimation_section(view: pd.DataFrame) -> None:
     )
     context_cards = st.columns(3)
     for index, (slot, estimate_id) in enumerate(zip(context_cards, CONTEXT_ESTIMATES)):
-        result = calculate_context_estimate(view, estimate_id)
-        definition = result["definition"]
+        try:
+            result = calculate_context_estimate(view, estimate_id)
+        except ValueError:
+            result = None
         with slot:
-            metric_card(
-                definition.title,
-                pct(result["estimate"], 1),
-                f"weighted population {result['weight_sum']:,.0f}",
-                "≡" if estimate_id == "EI-02" else "≣",
-                "orange" if estimate_id == "EI-02" else "yellow",
-                delay=index,
-            )
+            if result is None:
+                metric_card(CONTEXT_ESTIMATES[estimate_id].title, "—", "not reproducible on this source", "⊘", "rose")
+            else:
+                metric_card(
+                    CONTEXT_ESTIMATES[estimate_id].title,
+                    pct(result["estimate"], 1),
+                    f"weighted population {result['weight_sum']:,.0f}",
+                    "≡" if estimate_id == "EI-02" else "≣",
+                    "orange" if estimate_id == "EI-02" else "yellow",
+                    delay=index,
+                )
 
     band_tab, interval_tab, contract_tab = st.tabs(["Income-band detail", "Bootstrap intervals", "Official estimation contract"])
+    bands_available = "n11" in view and "n12" in view
     with band_tab:
-        monthly = context_weight_distribution(view, "n11").sort_values(ascending=False)
-        annual = context_weight_distribution(view, "n12").sort_values(ascending=False)
-        left, right = st.columns(2)
-        with left:
-            fig = go.Figure(go.Bar(y=monthly.index, x=monthly.values, orientation="h", marker_color="#de7c3f", text=[f"{v:,.0f}" for v in monthly.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
+        if bands_available:
+            monthly = context_weight_distribution(view, "n11").sort_values(ascending=False)
+            annual = context_weight_distribution(view, "n12").sort_values(ascending=False)
             st.markdown('<div class="chart-card"><div class="section-title">Monthly personal income bands</div><div class="section-note">Weighted population by band · don\'t-know/refusal excluded</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_theme(fig, 420), use_container_width=True, config={"displayModeBar": False}, width="stretch")
+            left, right = st.columns(2)
+            with left:
+                fig = go.Figure(go.Bar(y=monthly.index, x=monthly.values, orientation="h", marker_color="#de7c3f", text=[f"{v:,.0f}" for v in monthly.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
+                st.plotly_chart(chart_theme(fig, 420), width="stretch", config={"displayModeBar": False})
+            with right:
+                fig = go.Figure(go.Bar(y=annual.index, x=annual.values, orientation="h", marker_color="#8ca4f0", text=[f"{v:,.0f}" for v in annual.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
+                st.plotly_chart(chart_theme(fig, 420), width="stretch", config={"displayModeBar": False})
             st.markdown('</div>', unsafe_allow_html=True)
-        with right:
-            fig = go.Figure(go.Bar(y=annual.index, x=annual.values, orientation="h", marker_color="#8ca4f0", text=[f"{v:,.0f}" for v in annual.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
-            st.markdown('<div class="chart-card"><div class="section-title">Annual total income bands</div><div class="section-note">Weighted population by band · don\'t-know/refusal excluded</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_theme(fig, 420), use_container_width=True, config={"displayModeBar": False}, width="stretch")
-            st.markdown('</div>', unsafe_allow_html=True)
-        caveats = " ".join(limitation for estimate_id in CONTEXT_ESTIMATES for limitation in CONTEXT_ESTIMATES[estimate_id].limitations)
-        st.markdown(f'<div class="callout"><strong>Why this is not poverty.</strong><br>These bands are self-reported and band-coded; they are neither household consumption nor a welfare aggregate. They stay financial-context statistics. {caveats}</div>', unsafe_allow_html=True)
+            caveats = " ".join(limitation for estimate_id in CONTEXT_ESTIMATES for limitation in CONTEXT_ESTIMATES[estimate_id].limitations)
+            st.markdown(f'<div class="callout"><strong>Why this is not poverty.</strong><br>These bands are self-reported and band-coded; they are neither household consumption nor a welfare aggregate. They stay financial-context statistics. {caveats}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>The label-verified income-band variables (n11, n12) have no counterpart on this source, so the band distribution is withheld rather than approximated from other questions.</div>', unsafe_allow_html=True)
 
     with interval_tab:
         rows = []
         for indicator_id in INDICATORS:
-            ci = weighted_bootstrap_ci(view, indicator_id, n_boot=300, seed=42)
+            try:
+                ci = weighted_bootstrap_ci(view, indicator_id, n_boot=300, seed=42)
+            except ValueError:
+                continue  # indicator not reproducible on this source
             rows.append({
                 "ID": indicator_id,
                 "Indicator": INDICATORS[indicator_id].title,
@@ -738,10 +866,13 @@ def render_estimation_section(view: pd.DataFrame) -> None:
                 "Low (95%)": ci.low,
                 "High (95%)": ci.high,
             })
-        interval_table = pd.DataFrame(rows).set_index("ID")
-        interval_table[["Point", "Low (95%)", "High (95%)"]] = interval_table[["Point", "Low (95%)", "High (95%)"]].map(lambda v: f"{v * 100:.1f}%")
-        st.dataframe(interval_table, use_container_width=True, height=240)
-        st.markdown(f'<div class="callout"><strong>Method.</strong><br>{BOOTSTRAP_NOTE}</div>', unsafe_allow_html=True)
+        if rows:
+            interval_table = pd.DataFrame(rows).set_index("ID")
+            interval_table[["Point", "Low (95%)", "High (95%)"]] = interval_table[["Point", "Low (95%)", "High (95%)"]].map(lambda v: f"{v * 100:.1f}%")
+            st.dataframe(interval_table, width="stretch", height=240)
+            st.markdown(f'<div class="callout"><strong>Method.</strong><br>{BOOTSTRAP_NOTE}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>None of the documented indicators can be computed here, so no intervals are shown. Nothing is imputed to fill the table.</div>', unsafe_allow_html=True)
 
     with contract_tab:
         status = official_poverty_status()
@@ -829,16 +960,20 @@ def render_regional(df: pd.DataFrame) -> None:
                 metric_card("Internet access", pct(internet_value), f"national {pct(national_internet)} · Δ {internet_value - national_internet:+.1%}", "⌁", "orange", delay=2)
             with c4:
                 metric_card("Assessed cases", f"{int(drill['active_n']):,}", "valid active-access records · missing responses excluded", "▤", "green", delay=3)
-            dview = view[view["district"].eq(drill_target)]
-            setting_split = weighted_group(dview.assign(priority=dview["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
-            fig = go.Figure(go.Bar(x=setting_split["group"], y=setting_split["value"] * 100, marker_color=["#d95362" if s == "Rural" else "#f0a1ad" for s in setting_split["group"]], text=[f"{v:.0f}%" for v in setting_split["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
-            fig.update_yaxes(range=[0, max(30, float(setting_split["value"].max() * 100 + 10))], ticksuffix="%") if len(setting_split) else None
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown(f'<div class="section-title">{drill_target}: where does the priority share sit?</div><div class="section-note">Resilience Priority band share by urban / rural setting inside this district</div>', unsafe_allow_html=True)
-            st.plotly_chart(chart_theme(fig, 230), width="stretch", config={"displayModeBar": False})
+            if "resilience_band" in view:
+                dview = view[view["district"].eq(drill_target)]
+                setting_split = weighted_group(dview.assign(priority=dview["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
+                fig = go.Figure(go.Bar(x=setting_split["group"], y=setting_split["value"] * 100, marker_color=["#d95362" if s == "Rural" else "#f0a1ad" for s in setting_split["group"]], text=[f"{v:.0f}%" for v in setting_split["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+                fig.update_yaxes(range=[0, max(30, float(setting_split["value"].max() * 100 + 10))], ticksuffix="%") if len(setting_split) else None
+                st.markdown(f'<div class="section-title">{drill_target}: where does the priority share sit?</div><div class="section-note">Resilience Priority band share by urban / rural setting inside this district</div>', unsafe_allow_html=True)
+                st.plotly_chart(chart_theme(fig, 230), width="stretch", config={"displayModeBar": False})
+            else:
+                st.markdown(f'<div class="section-title">{drill_target}: priority-share split</div><div class="section-note">Not reproducible on this source: the resilience band needs the own-money, saving-behaviour and social-support capabilities, which are absent here.</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             gap_note = f"{drill_target} sits {drill['active_access'] - national_access:+.1%} versus the national weighted mean for active access in this filtered view, and there is no gap signal designed yet to say whether buffer building or digital access would be the better first intervention."
-            st.markdown(f'<div class="callout"><strong>Drill-down read.</strong><br><br>PRIORITY band inside {drill_target} is shown above by setting.{gap_note}</div>', unsafe_allow_html=True)
+            priority_note = f"PRIORITY band inside {drill_target} is shown above by setting." if "resilience_band" in view else "The resilience-band split is not reproducible on the active source; consult page 05 when the master Stata source is loaded."
+            st.markdown(f'<div class="callout"><strong>Drill-down read.</strong><br><br>{priority_note}{gap_note}</div>', unsafe_allow_html=True)
     data_footer(view, "Regional view")
 
 
@@ -850,6 +985,19 @@ def render_resilience(df: pd.DataFrame) -> None:
     )
     view = filter_bar(df, "resilience")
     if not has_data(view):
+        return
+    if "resilience_band" not in view:
+        st.markdown('<div class="callout"><strong>The resilience lens is not reproducible on the active source.</strong><br>The lens needs four observed capabilities; this source carries only the emergency-funds one. Own money, saving behaviour and a social-support contact have no label-verified counterpart here, so the Priority / Watch / Resilient band is withheld rather than approximated. Load the master Stata source for the full lens; the one component this source does support is shown below.</div>', unsafe_allow_html=True)
+        difficult_available = weighted_rate(view, view["emergency_difficult"]) if "emergency_difficult" in view else None
+        c1, c2 = st.columns(2)
+        with c1:
+            if difficult_available is None:
+                metric_card("Emergency feels difficult", "—", "not reproducible on this source", "⊘", "rose")
+            else:
+                metric_card("Emergency feels difficult", pct(difficult_available), "say raising 56,000 Rwf would be difficult (the lens component this source does support)", "◌", "orange")
+        with c2:
+            metric_card("Resilience band", "—", "needs all four lens capabilities · withheld", "⊘", "rose", delay=1)
+        data_footer(view, "Resilience view · lens withheld on this source")
         return
     risk = weighted_rate(view, view["resilience_band"].eq("Priority").astype(float))
     watch = weighted_rate(view, view["resilience_band"].eq("Watch").astype(float))
@@ -1289,14 +1437,55 @@ def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, che
     )
 
 
-def main() -> None:
-    try:
+@st.cache_data(show_spinner="Loading the SPSS source…")
+def load_spss_workload(path: Path) -> pd.DataFrame:
+    """Load + enrich the SPSS second source, cached like the master load."""
+
+    frame = pipeline_enrich_spss_data(pipeline_load_spss_data(path))
+    frame.attrs["source_id_key"] = "spss"
+    return frame
+
+
+@st.cache_data(show_spinner=False)
+def load_spss_profile(path: Path) -> SourceProfile:
+    return build_spss_profile(path)
+
+
+SPSS_EXPECTED_COLUMNS = [
+    "key", "row_id", "hh_wt", "pop_wt", "hh_size", "psu", "a1", "a2", "a3", "b0", "b2",
+    "c14_5", "e7", "ef9", "qf4_01", "qf4_03", "qf4_04", "qf4_05", "qf4_06",
+    "e9b", "active_access", "mobile_money", "bank_use", "sacco_use",
+    "emergency_fund", "internet_access", "income_pressure",
+]
+
+
+def load_analysis_workload() -> tuple[pd.DataFrame, SourceProfile, list[QualityCheck]]:
+    """Load the active source with its profile and executed quality checks."""
+
+    if active_source() == "spss":
+        df = load_spss_workload(SPSS_PATH)
+        profile = load_spss_profile(SPSS_PATH)
+        checks = run_quality_checks(
+            df,
+            source_variable_count=profile.source_variables,
+            expected_columns=SPSS_EXPECTED_COLUMNS,
+            row_unit="individual respondent",
+            slice_label="the documented second-source subset mapped to the master schema",
+        )
+    else:
         raw = pipeline_load_analysis_data(DATA_PATH)
         df = pipeline_enrich_analysis_data(raw)
+        df.attrs["source_id_key"] = "master"
         profile = load_source_profile(str(DATA_PATH))
         checks = run_quality_checks(df, source_variable_count=profile.source_variables)
+    return df, profile, checks
+
+
+def main() -> None:
+    try:
+        df, profile, checks = load_analysis_workload()
     except Exception as exc:
-        st.error(f"The dataset could not be loaded: {exc}")
+        st.error(f"The active source could not be loaded: {exc}")
         st.stop()
 
     app_header()

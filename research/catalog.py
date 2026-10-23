@@ -29,6 +29,8 @@ class SourceProfile:
     publication_status: str
     documentation: tuple[str, ...]
     notes: tuple[str, ...]
+    mapped_variables: int | None = None
+    psu_documented: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,6 +84,7 @@ def build_source_profile(path: str | Path, analytical_variables: int) -> SourceP
         rows=rows,
         source_variables=_source_variable_count(source),
         analytical_variables=analytical_variables,
+        mapped_variables=analytical_variables,
         source_release="Not documented in supplied materials",
         population_period="Not documented in supplied materials",
         metadata_status="Inspected: embedded Stata variable labels available",

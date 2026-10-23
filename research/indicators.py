@@ -135,12 +135,36 @@ def calculate_indicator(frame: pd.DataFrame, indicator_id: str) -> IndicatorResu
     definition = INDICATORS[indicator_id]
     required = set(definition.source_variables) | {"hh_wt"}
     missing = sorted(required - set(frame.columns))
+    absent_channels: list[str] = []
+    if indicator_id == "FI-01":
+        # A second source may legitimately lack a channel variable (e.g. no
+        # digital bank). The union is then taken over the channels PRESENT in
+        # the active source, and the absent channel is reported — it is never
+        # imputed as "No". Anchor channels (bank, mobile money, SACCO) must exist.
+        available = [c for c in definition.source_variables if c in frame.columns]
+        if "qf4_01" not in frame.columns or len(available) < 4:
+            raise ValueError(
+                f"Indicator {indicator_id} needs at least the bank anchor plus four channel variables; "
+                f"available: {', '.join(available)}"
+            )
+        # Channel availability is validated above (anchor + threshold); the
+        # documented absent channel is a scope reduction, not a failure, so
+        # clear the required-columns list for FI-01.
+        missing = []
+        absent_channels = [c for c in definition.source_variables if c not in frame.columns]
+        if "hh_wt" not in frame.columns:
+            raise ValueError("Indicator FI-01 is missing required column: hh_wt")
     if missing:
         raise ValueError(f"Indicator {indicator_id} is missing required columns: {', '.join(missing)}")
     values = indicator_value(frame, indicator_id)
     estimate, denominator_n, weight_sum = weighted_mean(frame, values)
     valid_weights = frame["hh_wt"].notna() & frame["hh_wt"].gt(0) & np.isfinite(frame["hh_wt"])
     numerator_n = int(((values == 1) & values.notna() & valid_weights).sum())
+    note = "No survey-design standard error is shown because PSU/strata metadata and a documented variance method were not supplied."
+    if absent_channels:
+        channel_map = {"qf4_02": "digital bank"}
+        names = ", ".join(channel_map.get(c, c) for c in absent_channels)
+        note += f" Channel(s) absent on the active source and excluded from the union: {names} — not imputed as 'No'."
     return IndicatorResult(
         definition=definition,
         estimate=estimate,
@@ -148,7 +172,7 @@ def calculate_indicator(frame: pd.DataFrame, indicator_id: str) -> IndicatorResu
         denominator_n=denominator_n,
         weight_sum=weight_sum,
         valid=denominator_n > 0 and not np.isnan(estimate),
-        note="No survey-design standard error is shown because PSU/strata metadata and a documented variance method were not supplied.",
+        note=note,
     )
 
 

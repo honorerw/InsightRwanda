@@ -27,15 +27,27 @@ def _check(check_id: str, category: str, status: str, finding: str, **evidence: 
     return QualityCheck(check_id, category, status, finding, evidence)
 
 
-def run_quality_checks(frame: pd.DataFrame, source_variable_count: int | None = None) -> list[QualityCheck]:
+def run_quality_checks(
+    frame: pd.DataFrame,
+    source_variable_count: int | None = None,
+    *,
+    expected_columns: list[str] | None = None,
+    row_unit: str = "household",
+    slice_label: str | None = None,
+) -> list[QualityCheck]:
     """Run structural and analytical-slice checks.
 
     These checks describe data structure and coding integrity. They do not certify
     representativeness, fieldwork quality, or official statistical publication.
+    Second sources pass ``expected_columns`` (the documented subset) and
+    ``row_unit="individual"`` so the key check states the unit instead of
+    failing innocently on repeated household keys.
     """
 
     checks: list[QualityCheck] = []
-    required = [c for c in ANALYSIS_COLUMNS if c not in {"province", "district", "setting", "sex", "head_sex"}]
+    if expected_columns is None:
+        expected_columns = [c for c in ANALYSIS_COLUMNS if c not in {"province", "district", "setting", "sex", "head_sex"}]
+    required = list(expected_columns)
     missing = sorted(set(required) - set(frame.columns))
     checks.append(_check(
         "schema_required_columns", "Schema", "PASS" if not missing else "FAIL",
@@ -50,9 +62,20 @@ def run_quality_checks(frame: pd.DataFrame, source_variable_count: int | None = 
     ))
 
     duplicate_keys = int(frame["key"].duplicated().sum()) if "key" in frame else -1
+    if row_unit == "household":
+        key_status = "PASS" if duplicate_keys == 0 else "FAIL"
+        key_finding = (
+            "Household identifiers are unique in the supplied slice." if duplicate_keys == 0
+            else "Household identifier is missing or repeated; row-level integrity cannot be confirmed."
+        )
+    else:
+        key_status = "INFO"
+        key_finding = (
+            f"Row unit is {row_unit}: household keys repeat across selected members "
+            f"({int(frame['key'].nunique()):,} unique households from {len(frame):,} rows)."
+        )
     checks.append(_check(
-        "unique_household_key", "Integrity", "PASS" if duplicate_keys == 0 else "FAIL",
-        "Household identifiers are unique in the supplied slice." if duplicate_keys == 0 else "Household identifier is missing or repeated; row-level integrity cannot be confirmed.",
+        "unique_household_key", "Integrity", key_status, key_finding,
         duplicate_rows=duplicate_keys,
     ))
 
@@ -122,11 +145,12 @@ def run_quality_checks(frame: pd.DataFrame, source_variable_count: int | None = 
     ))
 
     if source_variable_count is not None:
+        analytical_desc = slice_label or f"a documented {len(ANALYSIS_COLUMNS):,}-variable analytical slice"
         checks.append(_check(
             "source_inventory", "Traceability", "PASS",
-            f"The source metadata reports {source_variable_count:,} variables; the app uses a documented {len(ANALYSIS_COLUMNS):,}-variable analytical slice.",
+            f"The source metadata reports {source_variable_count:,} variables; the app uses {analytical_desc}.",
             source_variables=source_variable_count,
-            analytical_variables=len(ANALYSIS_COLUMNS),
+            analytical_variables=len(expected_columns),
         ))
     return checks
 
