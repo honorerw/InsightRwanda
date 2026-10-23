@@ -14,7 +14,7 @@ Access to a bank account is not resilience. This prototype answers the sharper q
 2. **Indicators are a contract, not a chart.** Each of FI-01…FI-06 carries an explicit definition, valid-response rule, source-variable mapping, method and stated limitations, all surfaced on the dashboard itself.
 3. **Honesty is the feature.** The Poverty page shows exact research blockers (no poverty line, no welfare aggregate, no variance methodology) instead of fabricating a rate. Denominators are visible; missing responses are excluded, never imputed or relabelled as "No".
 4. **Governance is enforced in code.** Household-level records and exports stay locked until explicit authorization plus publication approval exist in the source profile — enforced by `aggregate_release_allowed()` and verified by the test suite.
-5. **It estimates what it can — and refuses what it cannot.** Weighted bootstrap interval estimates accompany every financial-inclusion indicator (labelled explicitly as NOT survey-design standard errors), while a code-enforced contract (`official_poverty_status`) keeps official poverty estimation blocked until all six documented inputs are supplied. 26/26 unit tests pass (indicator maths checked against hand-coded reference calculations plus bootstrap, income-band and contract tests), and a headless Streamlit walkthrough script renders all 9 pages, exits non-zero on any failure.
+5. **It estimates what it can — and refuses what it cannot.** Weighted bootstrap interval estimates accompany every financial-inclusion indicator (labelled explicitly as NOT survey-design standard errors), while a code-enforced contract (`official_poverty_status`) keeps official poverty estimation blocked until all six documented inputs are supplied. 26/26 unit tests pass (indicator maths checked against hand-coded reference calculations plus bootstrap, income-band and contract tests), and a headless Streamlit walkthrough script renders all 9 pages, exits non-zero on any failure. Current suite: **39/39 tests OK**.
 
 ## Judging criteria alignment
 
@@ -22,13 +22,13 @@ Access to a bank account is not resilience. This prototype answers the sharper q
 |---|---|
 | Problem relevance | Targets the access-vs-resilience gap: emergency buffers, liquidity stress, income pressure, digital exclusion |
 | Data + methodology | Real NISR-labelled Stata data, household weights (`hh_wt`), denominators shown, weights validated finite/positive by automated checks |
-| Tech innovation | Transparent resilience composite, exploratory weighted prioritisation model, tamper-evident reproducibility fingerprint, governance-gated explorer |
+| Tech innovation | Transparent resilience composite, exploratory weighted prioritisation model cross-validated with accuracy/AUC (per-fold stability, confusion matrix, standardized-coefficient signs) and a district drill-down, tamper-evident reproducibility fingerprint, governance-gated explorer |
 | Usability + design | Custom branded 9-page UI, filter lens (province → district → setting → respondent), plain-language insights, responsive layout |
 | Tangible impact | Action prompts mapped to evidence: emergency-savings nudges, assisted digital rails (USSD/agents where internet access is thin), shock-responsive finance links |
 
 ## Verification record
 
-- Unit tests: **26/26 OK** (real-source + synthetic-fixture coverage of weights, codes, keys, geography, filters, publication gate, bootstrap intervals, income-band context estimates, official-estimation contract)
+- Unit tests: current total **39/39 OK** (real-source + synthetic-fixture coverage of weights, codes, keys, geography, filters, publication gate, bootstrap intervals, income-band context estimates, official-estimation contract, briefs)
 - Headless UI walkthrough: **9/9 pages render without exception** (`python scripts/walkthrough_app.py`)
 - Data-quality checks on the real source: **0 FAIL** (schema, key uniqueness, weights, geographic code validity/consistency, value codes)
 

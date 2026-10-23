@@ -36,7 +36,7 @@ python scripts/browser_render_check.py      # real-Chrome render + marker check
 ## 3. Nine-page tour
 
 ### 01 · Overview — the national signal
-Weighted KPIs (active formal access, mobile money, emergency buffer, income pressure) plus a headline candidate: *access is broad, buffers are thin*. Includes an exploratory, explicitly-non-causal prioritisation model.
+Weighted KPIs (active formal access, mobile money, emergency buffer, income pressure) plus a headline candidate: *access is broad, buffers are thin*. The Train & predict tab fits an exploratory, explicitly-non-causal prioritisation model and evaluates it honestly: a holdout confusion matrix, five-fold cross-validated accuracy and AUC, per-fold stability, standardized-coefficient signs, and the caveat that it is descriptive — never an eligibility decision.
 
 ![Overview](screenshots/overview.png)
 
@@ -51,7 +51,7 @@ Reports the exact research blockers (no poverty line, no welfare aggregate, no v
 ![Poverty insights](screenshots/poverty_insights.png)
 
 ### 04 · Geographic insights — where to act
-Province and district rankings of access, emergency funds and internet access.
+Province and district rankings of access, emergency funds and internet access, plus a district drill-down: pick any district to see active access, emergency buffer and internet against the national weighted mean (with deltas), the assessed case count, and the resilience Priority share split by urban/rural setting inside that district. A 60-second demo script mapped to the judging criteria is in `docs/DEMO.md`.
 
 ![Geographic insights](screenshots/geographic_insights.png)
 

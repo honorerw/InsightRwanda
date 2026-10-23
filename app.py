@@ -396,6 +396,12 @@ def train_priority_model(frame: pd.DataFrame) -> dict[str, object] | None:
 
     test_probability = _sigmoid(test_x @ coefficients)
     accuracy = float(np.average((test_probability >= .5) == test_y, weights=weights[test_idx])) if len(test_idx) else float("nan")
+    confusion = {
+        "tp": int(np.sum((test_probability >= .5) & (test_y == 1))),
+        "fp": int(np.sum((test_probability >= .5) & (test_y == 0))),
+        "tn": int(np.sum((test_probability < .5) & (test_y == 0))),
+        "fn": int(np.sum((test_probability < .5) & (test_y == 1))),
+    }
     return {
         "features": feature_columns,
         "medians": medians.to_dict(),
@@ -403,8 +409,93 @@ def train_priority_model(frame: pd.DataFrame) -> dict[str, object] | None:
         "scales": scales.to_dict(),
         "coefficients": coefficients,
         "accuracy": accuracy,
+        "confusion": confusion,
+        "feature_labels": [label for label, _ in MODEL_FEATURES][: len(feature_columns)],
         "train_rows": int(len(train_idx)),
         "test_rows": int(len(test_idx)),
+    }
+
+
+def _weighted_auc(y_true: np.ndarray, scores: np.ndarray, weights: np.ndarray) -> float:
+    """Weighted AUC via pairwise comparison decomposition (deterministic)."""
+
+    pos, neg = y_true == 1, y_true == 0
+    if not pos.any() or not neg.any():
+        return float("nan")
+    pos_w, neg_w = weights[pos], weights[neg]
+    pos_s, neg_s = scores[pos], scores[neg]
+    pos_sum = pos_w.sum()
+    neg_sum = neg_w.sum()
+    if pos_sum <= 0 or neg_sum <= 0:
+        return float("nan")
+    concordant = 0.0
+    for p_score, p_w in zip(pos_s, pos_w, strict=True):
+        concordant += (neg_w * (p_score > neg_s) + .5 * neg_w * (p_score == neg_s)).sum()
+    return float(concordant / (pos_sum * neg_sum))
+
+
+def cross_validated_metrics(frame: pd.DataFrame, folds: int = 5, seed: int = 42) -> dict[str, object] | None:
+    """Stratified-free shuffled k-fold CV of the same estimator, for stability evidence.
+
+    Returns mean ± sd of weighted accuracy and weighted AUC across folds, plus
+    the coefficient decay. Same honest caveat: resampling variability, not a
+    survey-design standard error.
+    """
+
+    target_mask = frame["resilience_band"].isin(["Priority", "Watch", "Resilient"])
+    feature_columns = [column for _, column in MODEL_FEATURES if column in frame]
+    model_frame = frame.loc[target_mask, feature_columns + ["resilience_band", "hh_wt"]].copy()
+    if target_mask.any() is False or len(model_frame) < folds * 20:
+        return None
+    y = model_frame["resilience_band"].eq("Priority").astype(float).to_numpy()
+    if y.min() == y.max():
+        return None
+    w = pd.to_numeric(model_frame["hh_wt"], errors="coerce").fillna(1).clip(lower=0).to_numpy()
+    w = np.where(w > 0, w, 1.0)
+    features = model_frame[feature_columns].apply(pd.to_numeric, errors="coerce")
+    medians = features.median().fillna(0)
+    filled = features.fillna(medians).to_numpy(dtype=float)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(model_frame))
+    fold_sizes = np.full(folds, len(order) // folds, dtype=int)
+    fold_sizes[: len(order) % folds] += 1
+    fold_acc, fold_auc, fold_ces = [], [], []
+    start = 0
+    for size in fold_sizes:
+        test_idx = order[start:start + size]
+        train_idx = np.setdiff1d(order, test_idx)
+        start += size
+        means = filled[train_idx].mean(axis=0)
+        scales = filled[train_idx].std(axis=0)
+        scales = np.where(scales == 0, 1.0, scales)
+        matrix = (filled - means) / scales
+        tx = np.column_stack([np.ones(len(train_idx)), matrix[train_idx]])
+        vx = np.column_stack([np.ones(len(test_idx)), matrix[test_idx]])
+        ty, vy, tw = y[train_idx], y[test_idx], w[train_idx]
+        ce = np.zeros(tx.shape[1], dtype=float)
+        normalizer = max(float(tw.sum()), 1.0)
+        for _ in range(500):
+            p = _sigmoid(tx @ ce)
+            ce -= .12 * ((tx.T @ ((p - ty) * tw)) / normalizer + np.r_[0, .01 * ce[1:]])
+        vp = _sigmoid(vx @ ce)
+        vw = w[test_idx]
+        fold_acc.append(float(np.average((vp >= .5) == vy, weights=vw)) if len(vw) else float("nan"))
+        fold_auc.append(_weighted_auc(vy, vp, vw))
+        fold_ces.append(ce.copy())
+    acc = np.asarray(fold_acc, dtype=float)
+    auc = np.asarray(fold_auc, dtype=float)
+    ces = np.asarray(fold_ces, dtype=float)
+    return {
+        "folds": int(folds),
+        "acc_mean": float(np.nanmean(acc)),
+        "acc_sd": float(np.nanstd(acc, ddof=1)),
+        "acc_folds": acc.tolist(),
+        "auc_mean": float(np.nanmean(auc)),
+        "auc_sd": float(np.nanstd(auc, ddof=1)),
+        "auc_folds": auc.tolist(),
+        "coef_stability": float(np.nanstd(ces, axis=0, ddof=1).max()),
+        "feature_labels": [label for label, _ in MODEL_FEATURES],
+        "features": feature_columns,
     }
 
 
@@ -510,12 +601,40 @@ def render_overview(df: pd.DataFrame) -> None:
         model = st.session_state.get("priority_model")
         prediction = st.session_state.get("priority_prediction")
         if model is not None and prediction is not None:
-            result_left, result_right = st.columns(2)
+            result_left, result_right, result_cv, result_cm = st.columns(4)
             with result_left:
                 st.metric("Predicted Priority probability", f"{prediction:.1%}")
             with result_right:
                 st.metric("Holdout accuracy", f"{model['accuracy']:.1%}")
-            st.caption(f"Trained on {model['train_rows']:,} records and evaluated on {model['test_rows']:,} held-out records using household weights.")
+            with result_cv:
+                cm = model["confusion"]
+                st.metric("Holdout balanced acc", f"{(cm['tp'] / max(1, cm['tp'] + cm['fn']) + cm['tn'] / max(1, cm['tn'] + cm['fp'])) / 2:.1%}")
+            with result_cm:
+                st.metric("Holdout rows", f"{model['test_rows']:,}")
+            st.caption(f"Trained on {model['train_rows']:,} records and evaluated on {model['test_rows']:,} held-out records using household weights. Confusion at the 0.5 threshold: TP {cm['tp']} · FP {cm['fp']} · TN {cm['tn']} · FN {cm['fn']}.")
+
+            evidence_left, evidence_right = st.columns([1.1, .9])
+            with evidence_left:
+                st.markdown('<div class="section-title">Cross-validated stability</div><div class="section-note">Same estimator, 5-fold shuffled CV on the filtered view</div>', unsafe_allow_html=True)
+                cv = cross_validated_metrics(view)
+                if cv is not None:
+                    cv_table = pd.DataFrame({
+                        "Fold": [f"{i + 1}" for i in range(cv["folds"])],
+                        "Weighted accuracy": [f"{v:.1%}" for v in cv["acc_folds"]],
+                        "Weighted AUC": [f"{v:.3f}" if np.isfinite(v) else "—" for v in cv["auc_folds"]],
+                    })
+                    st.dataframe(cv_table, hide_index=True, width="stretch", height=180)
+                    st.caption(f"Mean accuracy {cv['acc_mean']:.1%} ± {cv['acc_sd']:.1%} · mean AUC {cv['auc_mean']:.3f} ± {cv['auc_sd']:.3f}. Coefficient drift across folds: {cv['coef_stability']:.3f} (max sd over standardized coefficients).")
+                else:
+                    st.caption("Not enough rows in this filtered view for a meaningful 5-fold CV; holdout numbers above stand alone.")
+            with evidence_right:
+                st.markdown('<div class="section-title">What drives the prediction</div><div class="section-note">Standardized coefficients · sign, not causality</div>', unsafe_allow_html=True)
+                coef_table = pd.DataFrame({
+                    "Feature": model["feature_labels"],
+                    "Coefficient": [f"{c:+.3f}" for c in model["coefficients"][1:]],
+                })
+                st.dataframe(coef_table, hide_index=True, width="stretch", height=180)
+            st.caption("What is still true: this is a descriptive, weighted-statistics model on resampled rows — no survey-design standard error and no causal claim. It must not be used as an eligibility decision on its own.")
 
     data_footer(view)
 
@@ -729,6 +848,36 @@ def render_regional(df: pd.DataFrame) -> None:
         worst = district_table.iloc[-1] if len(district_table) else None
         if best is not None and worst is not None:
             st.markdown(f'<div class="callout"><strong>Decision cue.</strong><br><br>{best["group"]} leads this filtered view on active access at {pct(best["active_access"])}.<br><br>{worst["group"]} is the lowest at {pct(worst["active_access"])}; pair financial access expansion with a buffer-building offer.</div>', unsafe_allow_html=True)
+
+    if len(district_table) >= 2:
+        drill_target = st.selectbox("District drill-down", ["—"] + district_table["group"].tolist(), format_func=lambda d: "Pick a district to inspect" if d == "—" else d, key="regional_drill")
+        if drill_target and drill_target != "—":
+            drill = district_table.loc[district_table["group"].eq(drill_target)].iloc[0]
+            drill_internet = weighted_group(view, "district", "internet_access")
+            drill_internet = drill_internet.loc[drill_internet["group"].eq(drill_target)]
+            internet_value = float(drill_internet["value"].iloc[0]) if len(drill_internet) else float("nan")
+            national_access = weighted_rate(view, view["active_access"])
+            national_internet = weighted_rate(view, view["internet_access"])
+            national_emergency = weighted_rate(view, view["emergency_fund"])
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                metric_card(f"{drill_target} · active access", pct(drill["active_access"]), f"national {pct(national_access)} · Δ {drill['active_access'] - national_access:+.1%}", "↗", "green")
+            with c2:
+                metric_card("Emergency buffer", pct(drill["emergency_fund"]), f"national {pct(national_emergency)} · Δ {drill['emergency_fund'] - national_emergency:+.1%}", "◌", "yellow", delay=1)
+            with c3:
+                metric_card("Internet access", pct(internet_value), f"national {pct(national_internet)} · Δ {internet_value - national_internet:+.1%}", "⌁", "orange", delay=2)
+            with c4:
+                metric_card("Assessed cases", f"{int(drill['active_n']):,}", "valid active-access records · missing responses excluded", "▤", "green", delay=3)
+            dview = view[view["district"].eq(drill_target)]
+            setting_split = weighted_group(dview.assign(priority=dview["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
+            fig = go.Figure(go.Bar(x=setting_split["group"], y=setting_split["value"] * 100, marker_color=["#d95362" if s == "Rural" else "#f0a1ad" for s in setting_split["group"]], text=[f"{v:.0f}%" for v in setting_split["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+            fig.update_yaxes(range=[0, max(30, float(setting_split["value"].max() * 100 + 10))], ticksuffix="%") if len(setting_split) else None
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{drill_target}: where does the priority share sit?</div><div class="section-note">Resilience Priority band share by urban / rural setting inside this district</div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_theme(fig, 230), width="stretch", config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+            gap_note = f"{drill_target} sits {drill['active_access'] - national_access:+.1%} versus the national weighted mean for active access in this filtered view, and there is no gap signal designed yet to say whether buffer building or digital access would be the better first intervention."
+            st.markdown(f'<div class="callout"><strong>Drill-down read.</strong><br><br>PRIORITY band inside {drill_target} is shown above by setting.{gap_note}</div>', unsafe_allow_html=True)
     data_footer(view, "Regional view")
 
 
