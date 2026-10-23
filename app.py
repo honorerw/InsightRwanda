@@ -255,14 +255,6 @@ def nav(df: pd.DataFrame) -> str:
                 if pressed:
                     current = page
                     st.session_state["workspace_nav"] = page
-        st.markdown('<hr>', unsafe_allow_html=True)
-        st.markdown('<div class="side-label" style="margin-top:.1rem">Context</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="side-card"><div class="side-card-title">Dataset loaded</div><div class="side-card-copy">Supplied NISR Stata file, read-only. Household-weighted with <span class="mono">hh_wt</span>; missing responses excluded from every indicator.</div><div class="side-status"><span class="side-status-dot"></span>{len(df):,} records ready</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div class="side-card"><div class="side-card-title">How to read the pages</div><div class="side-card-copy">Each page states its definitions, denominators and limits on the page itself. Estimates are descriptive — never causal claims.</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-footer">Track 2 · Financial Inclusion &amp; Poverty Reduction · NISR Hackathon 2026.<br>Source: supplied NISR dataset.</div>', unsafe_allow_html=True)
     return current
 
 
