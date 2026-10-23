@@ -24,6 +24,7 @@ PAGES = [
     "Poverty insights",
     "Geographic insights",
     "Resilience lab",
+    "Predictive insights",
     "Data quality",
     "Data explorer",
     "Methods & sources",
@@ -50,6 +51,7 @@ def apply_filter_lens(at: st_test.AppTest, page: str) -> bool:
         "Poverty insights": "poverty_context",
         "Geographic insights": "regional",
         "Resilience lab": "resilience",
+        "Predictive insights": "predictive",
         "Data explorer": "explorer",
     }.get(page)
     if prefix is None:
@@ -89,11 +91,11 @@ def main() -> int:
     if at.exception:
         failures.append("Overview tabs")
         print(f"  FAIL  Overview tabs: {at.exception[0].value}")
-    elif len(at.tabs) == 3:
-        print("  OK    Overview · 3 tabs present (National signal / Opportunity map / Train & predict)")
+    elif len(at.tabs) == 2:
+        print("  OK    Overview · 2 tabs present (National signal / Opportunity map; Train & predict has its own page)")
     else:
         failures.append("Overview tab count")
-        print(f"  FAIL  Overview · expected 3 tabs, found {len(at.tabs)}")
+        print(f"  FAIL  Overview · expected 2 tabs, found {len(at.tabs)}")
 
     if failures:
         print(f"\nWALKTHROUGH FAILED ({len(failures)}): {failures}")

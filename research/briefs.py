@@ -34,7 +34,8 @@ from .quality import QualityCheck, run_quality_checks
 
 PAGES: tuple[str, ...] = (
     "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
-    "Resilience lab", "Data quality", "Data explorer", "Methods & sources", "About the build",
+    "Resilience lab", "Predictive insights", "Data quality", "Data explorer",
+    "Methods & sources", "About the build",
 )
 
 LENS_PREFIXES: dict[str, str] = {
@@ -43,6 +44,7 @@ LENS_PREFIXES: dict[str, str] = {
     "Poverty insights": "poverty_context",
     "Geographic insights": "regional",
     "Resilience lab": "resilience",
+    "Predictive insights": "predictive",
     "Data explorer": "explorer",
 }
 
@@ -283,6 +285,65 @@ def _build_resilience(view: pd.DataFrame, profile: SourceProfile | None) -> Page
     )
 
 
+def _build_predictive_insights(
+    view: pd.DataFrame,
+    profile: SourceProfile | None,
+    record: "ModelRecord | None" = None,
+) -> PageBrief:
+    """Aggregate-only brief for the model page; all figures are evaluation summaries.
+
+    `record` may carry a fitted ModelRecord from the dashboard cache; when absent
+    the builder fits one. If no honest model can be fitted for this lens, the
+    brief degrades to the lens' band composition instead of inventing metrics.
+    """
+
+    if record is None:
+        try:
+            from research.modeling import train_final_model
+
+            record = train_final_model(view)
+        except (ValueError, ImportError):
+            record = None
+
+    lens_record_n = len(view)
+    if record is None:
+        kpis: tuple[tuple[str, str, str], ...] = (
+            ("Selected model", NA, "no honest model for this lens"),
+            ("Holdout ROC-AUC", NA, "not evaluated for this lens"),
+            ("Holdout weighted F1", NA, "not evaluated for this lens"),
+            ("Holdout records", f"{lens_record_n:,}", "usable rows in this lens"),
+        )
+    else:
+        m = record.metrics
+        kpis = (
+            ("Selected model", record.model_name, f"best weighted F1 of {len(record.config['candidates'])} candidates"),
+            ("Holdout ROC-AUC", f"{m['roc_auc']:.3f}", f"held-out fold n={record.n_test:,}"),
+            ("Holdout weighted F1", f"{m['weighted_f1']:.3f}", f"threshold {record.config['threshold']}"),
+            ("Candidates evaluated", f"{len(record.config['candidates'])}", "one majority-class + three learners, same folds"),
+            ("Holdout base rate", f"{m['base_rate'] * 100:.1f}%", "weighted share of Priority rows"),
+            ("Brier score", f"{m['brier']:.3f}", "lower is better calibration"),
+        )
+
+    return PageBrief(
+        page="Predictive insights",
+        eyebrow="06 / Predictive insights",
+        title="Brief — Predictive insights",
+        narrative=(
+            "The candidate comparison under group-stratified cross-validation, with the "
+            "selected model's held-out scorecard — evidence on how far an honest model "
+            "moves beyond a majority-class baseline for this lens."
+        ),
+        caution=(
+            "Predictive associations on resampled rows, not survey-design estimates; no "
+            "causal claim and never an eligibility decision. Intent-defining capability "
+            "columns are excluded from the feature set by a leakage guard."
+        ),
+        kpis=kpis,
+        lens_note=_lens(view),
+        footer_lines=_footer(profile),
+    )
+
+
 def _build_quality(view: pd.DataFrame, profile: SourceProfile | None, checks: Sequence[QualityCheck]) -> PageBrief:
     summary = {status: sum(c.status == status for c in checks) for status in ("PASS", "WARN", "FAIL", "INFO")}
     missingness = {}
@@ -294,7 +355,7 @@ def _build_quality(view: pd.DataFrame, profile: SourceProfile | None, checks: Se
     invalid_weights = sum(c.evidence.get("invalid_weights", 0) for c in checks if c.check_id == "household_weight")
     return PageBrief(
         page="Data quality",
-        eyebrow="06 / Data quality",
+        eyebrow="07 / Data quality",
         title="Brief — Checks that actually ran",
         narrative=(
             f"{len(checks)} structural and coding checks executed on the loaded slice, with "
@@ -322,7 +383,7 @@ def _build_explorer(view: pd.DataFrame, profile: SourceProfile | None) -> PageBr
     released = aggregate_release_allowed(profile)
     return PageBrief(
         page="Data explorer",
-        eyebrow="07 / Data explorer",
+        eyebrow="08 / Data explorer",
         title="Brief — Governance state",
         narrative=(
             "What the explorer would expose and what stays withheld: this brief itself is "
@@ -350,7 +411,7 @@ def _build_methods(view: pd.DataFrame, profile: SourceProfile | None) -> PageBri
         raise ValueError("Methods brief requires the loaded source profile")
     return PageBrief(
         page="Methods & sources",
-        eyebrow="08 / Methods & sources",
+        eyebrow="09 / Methods & sources",
         title="Brief — Source profile snapshot",
         narrative=(
             "The traceable route from the supplied Stata file to displayed results: five "
@@ -383,7 +444,7 @@ def _build_about(view: pd.DataFrame, profile: SourceProfile | None) -> PageBrief
     released = aggregate_release_allowed(profile) if profile is not None else False
     return PageBrief(
         page="About the build",
-        eyebrow="09 / About the build",
+        eyebrow="10 / About the build",
         title="Brief — Product thesis",
         narrative=(
             "“Account access is not resilience.” The prototype targets the gap between "
@@ -416,6 +477,7 @@ def build_page_brief(
     view: pd.DataFrame,
     profile: SourceProfile | None = None,
     checks: Sequence[QualityCheck] | None = None,
+    model_record: "ModelRecord | None" = None,
 ) -> PageBrief:
     """Build the one-page brief for a dashboard page from a loaded, enriched view."""
 
@@ -429,6 +491,8 @@ def build_page_brief(
         return _build_geographic(view, profile)
     if page == "Resilience lab":
         return _build_resilience(view, profile)
+    if page == "Predictive insights":
+        return _build_predictive_insights(view, profile, model_record)
     if page == "Data quality":
         return _build_quality(view, profile, checks if checks is not None else run_quality_checks(view))
     if page == "Data explorer":

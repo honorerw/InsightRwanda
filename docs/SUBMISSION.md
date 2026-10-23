@@ -24,8 +24,8 @@ The app opens on **Overview** and loads the supplied Stata source directly from 
 To re-verify before judging (optional, ~5 s):
 
 ```bash
-python -m unittest discover -s tests        # 39/39 pass
-python scripts/walkthrough_app.py           # headless render of all 9 pages
+python -m unittest discover -s tests        # 52/52 pass
+python scripts/walkthrough_app.py           # headless render of all 10 pages
 python scripts/browser_render_check.py      # real-Chrome render + marker check
 ```
 
@@ -36,7 +36,7 @@ python scripts/browser_render_check.py      # real-Chrome render + marker check
 ## 3. Nine-page tour
 
 ### 01 · Overview — the national signal
-Weighted KPIs (active formal access, mobile money, emergency buffer, income pressure) plus a headline candidate: *access is broad, buffers are thin*. The Train & predict tab fits an exploratory, explicitly-non-causal prioritisation model and evaluates it honestly: a holdout confusion matrix, five-fold cross-validated accuracy and AUC, per-fold stability, standardized-coefficient signs, and the caveat that it is descriptive — never an eligibility decision.
+Weighted KPIs (active formal access, mobile money, emergency buffer, income pressure) plus a headline candidate: *access is broad, buffers are thin*. The dedicated **Predictive insights** page runs the real predictive workflow: a majority-class baseline vs logistic regression, a decision tree and a gradient-boosted ensemble under group-stratified 5-fold cross-validation with the household weight attached to every metric. The best candidate by weighted F1 is refit and evaluated once on a held-out fold (ROC-AUC, F1, precision/recall, log loss, Brier, confusion counts), with a calibration table, permutation importance, **threshold trade-offs** (weighted precision/recall/F1 from 0.3 to 0.7 plus a precision-vs-recall sweep) and **subgroup performance** (held-out metrics per province, setting and respondent sex, low-evidence cells flagged) — all labelled as predictive associations on resampled rows, never causality or eligibility.
 
 ![Overview](screenshots/overview.png)
 
@@ -84,11 +84,11 @@ Why the access-vs-resilience framing is the actionable one, and how the prototyp
 
 | Check | Result |
 |---|---|
-| Unit tests (real source + synthetic fixtures + estimation + briefs) | 39/39 OK |
-| Headless page walkthrough (incl. filters, tabs) | 9/9 + 6/6 + tabs OK |
+| Unit tests (real source + synthetic fixtures + estimation + briefs + modeling + page artifacts) | 52/52 OK |
+| Headless page walkthrough (incl. filters, tabs) | 10/10 + 7/7 + tabs OK |
 | Real-browser render (Chrome/CDP, DOM + pixel check) | PASSED |
 | Data-quality checks on the source file | 0 FAIL |
-| Screenshots in this guide | 9/9 pages, marker-verified |
+| Screenshots in this guide | 10/10 pages, marker-verified |
 
 ## 5. Deliberate boundaries
 

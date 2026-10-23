@@ -22,6 +22,7 @@ The application is connected to the supplied `data/dataset.dta` source. It does 
 - An explicit poverty-status page that reports blockers rather than fabricating poverty rates.
 - Governance-gated aggregate data explorer; household-level preview and raw export stay disabled pending explicit authorization, publication approval and an approved disclosure rule.
 - One-page, non-gated insight brief for every page (PDF + PNG) — download buttons in the app and committed copies in `docs/briefs/`; aggregate values only, no household records.
+- A dedicated Predictive insights page: candidate comparison under group-stratified cross-validation, held-out scorecard, threshold trade-off analysis and subgroup model performance with low-evidence flags.
 - Methods, source profile, governance status and evidence-chain pages.
 - Real-source tests in `tests/test_real_pipeline.py` plus estimation and brief test suites.
 
@@ -40,11 +41,11 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 39 tests. It exercises the supplied Stata file
+The current test suite contains 52 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
 filtering, source errors, publication gates, bootstrap intervals, income-band
-context estimates, the official-poverty unlock contract and the nine one-page
+context estimates, the official-poverty unlock contract and the ten one-page
 briefs (content, weighting arithmetic, deterministic rendering, PDF/PNG validity
 and identifier exclusion).
 

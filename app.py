@@ -15,6 +15,15 @@ from research.data_pipeline import (
     filter_analysis_data as pipeline_filter_analysis_data,
     load_analysis_data as pipeline_load_analysis_data,
 )
+from research.modeling import (
+    ModelRecord,
+    holdout_artifacts,
+    predict_priority,
+    pr_curve,
+    subgroup_performance,
+    threshold_metrics,
+    train_final_model,
+)
 from research.estimation import (
     BOOTSTRAP_NOTE,
     CONTEXT_ESTIMATES,
@@ -226,13 +235,13 @@ def nav(df: pd.DataFrame) -> str:
     numbered entries matching each page's own '0N /' eyebrow, then context cards."""
     nav_pages = [
         "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
-        "Resilience lab", "Data quality", "Data explorer", "Methods & sources",
-        "About the build",
+        "Resilience lab", "Predictive insights", "Data quality", "Data explorer",
+        "Methods & sources", "About the build",
     ]
     nav_groups = [
-        ("Evidence", nav_pages[:5]),
-        ("Governance", nav_pages[5:7]),
-        ("How it is built", nav_pages[7:]),
+        ("Evidence", nav_pages[:6]),
+        ("Governance", nav_pages[6:8]),
+        ("How it is built", nav_pages[8:]),
     ]
     numbers = {page: f"{index:02d}" for index, page in enumerate(nav_pages, start=1)}
     current = st.session_state.get("workspace_nav", "Overview")
@@ -348,171 +357,188 @@ def data_footer(frame: pd.DataFrame, label: str = "Filtered view") -> None:
 # -----------------------------------------------------------------------------
 # Pages
 # -----------------------------------------------------------------------------
-MODEL_FEATURES = [
-    ("Household size", "hh_size"),
-    ("Respondent sex", "b2"),
-    ("Setting", "a6"),
-    ("Internet access", "c14_5"),
-    ("Phone ownership", "f3"),
-    ("Mobile money use", "qf4_05"),
-]
+@st.cache_data(show_spinner="Fitting candidate models…")
+def evaluate_model_workload(view: pd.DataFrame) -> ModelRecord | None:
+    """Run the full candidate evaluation for the current lens and cache the record."""
 
-
-def _sigmoid(values: np.ndarray) -> np.ndarray:
-    return 1 / (1 + np.exp(-np.clip(values, -35, 35)))
-
-
-def train_priority_model(frame: pd.DataFrame) -> dict[str, object] | None:
-    """Fit a small weighted logistic model for exploratory prioritisation."""
-
-    target_mask = frame["resilience_band"].isin(["Priority", "Watch", "Resilient"])
-    feature_columns = [column for _, column in MODEL_FEATURES if column in frame]
-    if not target_mask.any() or len(feature_columns) < 3:
+    try:
+        return train_final_model(view)
+    except ValueError:
         return None
 
-    model_frame = frame.loc[target_mask, feature_columns + ["resilience_band", "hh_wt"]].copy()
-    target = model_frame["resilience_band"].eq("Priority").astype(float).to_numpy()
-    if target.min() == target.max():
-        return None
 
-    raw_features = model_frame[feature_columns].apply(pd.to_numeric, errors="coerce")
-    weights = pd.to_numeric(model_frame["hh_wt"], errors="coerce").fillna(1).clip(lower=0).to_numpy()
-    weights = np.where(weights > 0, weights, 1.0)
-    rng = np.random.default_rng(42)
-    order = rng.permutation(len(model_frame))
-    split = max(1, min(len(order) - 1, int(len(order) * .8)))
-    train_idx, test_idx = order[:split], order[split:]
+def render_model_evaluation_tab(view: pd.DataFrame) -> None:
+    """Train & predict: real candidate evaluation, selected-model readout, prediction form."""
 
-    medians = raw_features.iloc[train_idx].median().fillna(0)
-    means = raw_features.iloc[train_idx].fillna(medians).mean()
-    scales = raw_features.iloc[train_idx].fillna(medians).std().replace(0, 1).fillna(1)
-    matrix = ((raw_features.fillna(medians) - means) / scales).to_numpy(dtype=float)
-    train_x = np.column_stack([np.ones(len(train_idx)), matrix[train_idx]])
-    test_x = np.column_stack([np.ones(len(test_idx)), matrix[test_idx]])
-    train_y, test_y = target[train_idx], target[test_idx]
-    train_w = weights[train_idx]
+    section_head("Train a prioritisation model", "Predict the Priority resilience band from features that do not define it")
+    st.caption(
+        "One complete end-to-end workflow is fitted on the current filtered view: a majority-class baseline "
+        "is compared with logistic regression, a decision tree and a gradient-boosted ensemble under "
+        "group-stratified 5-fold cross-validation with the survey weight attached to every metric. "
+        "This is a predictive association over resampled rows — no survey-design standard error and no causal claim; it must never be used as an eligibility decision on its own."
+    )
 
-    coefficients = np.zeros(train_x.shape[1], dtype=float)
-    normalizer = max(float(train_w.sum()), 1.0)
-    for _ in range(500):
-        probability = _sigmoid(train_x @ coefficients)
-        gradient = (train_x.T @ ((probability - train_y) * train_w)) / normalizer
-        gradient[1:] += .01 * coefficients[1:]
-        coefficients -= .12 * gradient
+    record = evaluate_model_workload(view)
+    if record is None:
+        st.info("This filtered view does not contain both classes with usable weights, so no honest model can be fitted here.")
+        return
 
-    test_probability = _sigmoid(test_x @ coefficients)
-    accuracy = float(np.average((test_probability >= .5) == test_y, weights=weights[test_idx])) if len(test_idx) else float("nan")
-    confusion = {
-        "tp": int(np.sum((test_probability >= .5) & (test_y == 1))),
-        "fp": int(np.sum((test_probability >= .5) & (test_y == 0))),
-        "tn": int(np.sum((test_probability < .5) & (test_y == 0))),
-        "fn": int(np.sum((test_probability < .5) & (test_y == 1))),
-    }
-    return {
-        "features": feature_columns,
-        "medians": medians.to_dict(),
-        "means": means.to_dict(),
-        "scales": scales.to_dict(),
-        "coefficients": coefficients,
-        "accuracy": accuracy,
-        "confusion": confusion,
-        "feature_labels": [label for label, _ in MODEL_FEATURES][: len(feature_columns)],
-        "train_rows": int(len(train_idx)),
-        "test_rows": int(len(test_idx)),
-    }
+    left, right = st.columns([1.15, .85])
+    with left:
+        st.markdown('<div class="section-title">Candidate comparison, cross-validated</div><div class="section-note">5-fold group-stratified CV · weighted F1 and ROC-AUC · mean ± sd</div>', unsafe_allow_html=True)
+        st.dataframe(record.fold_metrics_table, hide_index=True, width="stretch", height=150)
+    with right:
+        m = record.metrics
+        metric_left, metric_right = st.columns(2)
+        with metric_left:
+            st.metric("Selected model", record.model_name)
+            st.metric("Holdout weighted F1", f"{m['weighted_f1']:.3f}")
+            st.metric("Holdout ROC-AUC", f"{m['roc_auc']:.3f}")
+        with metric_right:
+            st.metric("Base rate (weighted)", f"{m['base_rate']:.1%}")
+            st.metric("Holdout precision / recall", f"{m['weighted_precision']:.3f} / {m['weighted_recall']:.3f}")
+            st.metric("Brier score", f"{m['brier']:.3f}")
 
+    imp_left, imp_right = st.columns([1.1, .9])
+    with imp_left:
+        st.markdown('<div class="section-title">What drives the prediction</div><div class="section-note">Permutation importance on the held-out fold (AUC drop when a feature is shuffled)</div>', unsafe_allow_html=True)
+        importance = pd.DataFrame({
+            "Feature": list(record.permutation_importance),
+            "AUC drop": [f"{v:+.4f}" for v in record.permutation_importance.values()],
+        })
+        fig = go.Figure(go.Bar(y=importance["Feature"], x=[float(v[1:]) for v in importance["AUC drop"]], orientation="h", marker_color="#3155d4", hovertemplate="%{y}: %{x:.4f}<extra></extra>"))
+        fig.update_xaxes(tickformat=".3f")
+        fig.update_yaxes(autorange="reversed")
+        st.plotly_chart(chart_theme(fig, min(380, 56 * len(importance) + 40)), width="stretch", config={"displayModeBar": False})
+    with imp_right:
+        st.markdown('<div class="section-title">Calibration on the held-out fold</div><div class="section-note">Predicted vs observed Priority share per probability quantile</div>', unsafe_allow_html=True)
+        st.dataframe(record.calibration_table, hide_index=True, width="stretch", height=150)
+        cm = record.confusion
+        st.caption(
+            f"Held-out fold: {record.n_test:,} records ({record.households_test:,} unique respondent keys), unweighted confusion counts "
+            f"TP {cm['tp']} · FP {cm['fp']} · TN {cm['tn']} · FN {cm['fn']}. {record.importances_note if (importance_note := getattr(record, 'importances_note', None)) else 'Permutation importance is a predictive association, not a causal effect.'}"
+        )
 
-def _weighted_auc(y_true: np.ndarray, scores: np.ndarray, weights: np.ndarray) -> float:
-    """Weighted AUC via pairwise comparison decomposition (deterministic)."""
+    section_head("Predict one composed household", "Inputs missing below take the training-most-typical value for their variable")
+    with st.form("priority_model_form"):
+        input_left, input_right = st.columns(2)
+        with input_left:
+            household_size = st.number_input("Household size", min_value=1, max_value=30, value=4, step=1)
+            respondent_sex = st.selectbox("Respondent sex", ["Female", "Male"])
+            setting = st.selectbox("Setting", ["Rural", "Urban"])
+        with input_right:
+            internet_access = st.selectbox("Internet access", ["No", "Yes"])
+            phone_ownership = st.selectbox("Phone ownership", ["No", "Yes"])
+            mobile_money_use = st.selectbox("Mobile money use", ["No", "Yes"])
+        train_and_predict = st.form_submit_button("Predict from the selected model", type="primary")
 
-    pos, neg = y_true == 1, y_true == 0
-    if not pos.any() or not neg.any():
-        return float("nan")
-    pos_w, neg_w = weights[pos], weights[neg]
-    pos_s, neg_s = scores[pos], scores[neg]
-    pos_sum = pos_w.sum()
-    neg_sum = neg_w.sum()
-    if pos_sum <= 0 or neg_sum <= 0:
-        return float("nan")
-    concordant = 0.0
-    for p_score, p_w in zip(pos_s, pos_w, strict=True):
-        concordant += (neg_w * (p_score > neg_s) + .5 * neg_w * (p_score == neg_s)).sum()
-    return float(concordant / (pos_sum * neg_sum))
+    if train_and_predict:
+        prediction_values = {
+            "hh_size": float(household_size),
+            "b2": 2.0 if respondent_sex == "Female" else 1.0,
+            "a6": 2.0 if setting == "Rural" else 1.0,
+            "c14_5": 1.0 if internet_access == "Yes" else 2.0,
+            "f3": 1.0 if phone_ownership == "Yes" else 2.0,
+            "qf4_05": 1.0 if mobile_money_use == "Yes" else 2.0,
+            "sex": respondent_sex,
+            "setting": setting,
+        }
+        try:
+            probability = predict_priority(record, prediction_values)
+            st.metric("Predicted Priority-band probability", f"{probability:.1%}")
+            st.caption(
+                "An uncertain analytical estimate for a composed household, not a label about any existing household. "
+                "The context variables not entered here are held at training-typical values."
+            )
+        except (ValueError, KeyError) as error:
+            st.error(f"Prediction could not be produced: {error}")
 
-
-def cross_validated_metrics(frame: pd.DataFrame, folds: int = 5, seed: int = 42) -> dict[str, object] | None:
-    """Stratified-free shuffled k-fold CV of the same estimator, for stability evidence.
-
-    Returns mean ± sd of weighted accuracy and weighted AUC across folds, plus
-    the coefficient decay. Same honest caveat: resampling variability, not a
-    survey-design standard error.
-    """
-
-    target_mask = frame["resilience_band"].isin(["Priority", "Watch", "Resilient"])
-    feature_columns = [column for _, column in MODEL_FEATURES if column in frame]
-    model_frame = frame.loc[target_mask, feature_columns + ["resilience_band", "hh_wt"]].copy()
-    if target_mask.any() is False or len(model_frame) < folds * 20:
-        return None
-    y = model_frame["resilience_band"].eq("Priority").astype(float).to_numpy()
-    if y.min() == y.max():
-        return None
-    w = pd.to_numeric(model_frame["hh_wt"], errors="coerce").fillna(1).clip(lower=0).to_numpy()
-    w = np.where(w > 0, w, 1.0)
-    features = model_frame[feature_columns].apply(pd.to_numeric, errors="coerce")
-    medians = features.median().fillna(0)
-    filled = features.fillna(medians).to_numpy(dtype=float)
-    rng = np.random.default_rng(seed)
-    order = rng.permutation(len(model_frame))
-    fold_sizes = np.full(folds, len(order) // folds, dtype=int)
-    fold_sizes[: len(order) % folds] += 1
-    fold_acc, fold_auc, fold_ces = [], [], []
-    start = 0
-    for size in fold_sizes:
-        test_idx = order[start:start + size]
-        train_idx = np.setdiff1d(order, test_idx)
-        start += size
-        means = filled[train_idx].mean(axis=0)
-        scales = filled[train_idx].std(axis=0)
-        scales = np.where(scales == 0, 1.0, scales)
-        matrix = (filled - means) / scales
-        tx = np.column_stack([np.ones(len(train_idx)), matrix[train_idx]])
-        vx = np.column_stack([np.ones(len(test_idx)), matrix[test_idx]])
-        ty, vy, tw = y[train_idx], y[test_idx], w[train_idx]
-        ce = np.zeros(tx.shape[1], dtype=float)
-        normalizer = max(float(tw.sum()), 1.0)
-        for _ in range(500):
-            p = _sigmoid(tx @ ce)
-            ce -= .12 * ((tx.T @ ((p - ty) * tw)) / normalizer + np.r_[0, .01 * ce[1:]])
-        vp = _sigmoid(vx @ ce)
-        vw = w[test_idx]
-        fold_acc.append(float(np.average((vp >= .5) == vy, weights=vw)) if len(vw) else float("nan"))
-        fold_auc.append(_weighted_auc(vy, vp, vw))
-        fold_ces.append(ce.copy())
-    acc = np.asarray(fold_acc, dtype=float)
-    auc = np.asarray(fold_auc, dtype=float)
-    ces = np.asarray(fold_ces, dtype=float)
-    return {
-        "folds": int(folds),
-        "acc_mean": float(np.nanmean(acc)),
-        "acc_sd": float(np.nanstd(acc, ddof=1)),
-        "acc_folds": acc.tolist(),
-        "auc_mean": float(np.nanmean(auc)),
-        "auc_sd": float(np.nanstd(auc, ddof=1)),
-        "auc_folds": auc.tolist(),
-        "coef_stability": float(np.nanstd(ces, axis=0, ddof=1).max()),
-        "feature_labels": [label for label, _ in MODEL_FEATURES],
-        "features": feature_columns,
-    }
+    st.caption(
+        f"Reproducibility: seed {record.config['seed']} · {record.config['n_splits']}-fold StratifiedGroupKFold on the respondent key · "
+        f"positive class {record.config['positive_class']} · threshold {record.config['threshold']} · candidates {', '.join(record.config['candidates'])}. "
+        f"Selection rule: {record.selection_rule} Target: {record.target_definition}."
+    )
 
 
-def predict_priority_probability(model: dict[str, object], values: dict[str, float]) -> float:
-    feature_columns = model["features"]
-    row = np.array([
-        (values.get(column, model["medians"].get(column, 0)) - model["means"].get(column, 0)) / model["scales"].get(column, 1)
-        for column in feature_columns
-    ], dtype=float)
-    coefficients = np.asarray(model["coefficients"], dtype=float)
-    return float(_sigmoid(np.array([1.0, *row]) @ coefficients))
+@st.cache_data(show_spinner="Scoring the held-out fold…")
+def holdout_view(view: pd.DataFrame, record_name: str) -> pd.DataFrame:
+    """Score the deterministic held-out fold (cached by lens, keyed off the record)."""
+
+    record = evaluate_model_workload(view)
+    if record is None or record.model_name != record_name:
+        raise ValueError("Model record is not available for this view")
+    return holdout_artifacts(view, record)
+
+
+def render_threshold_tradeoff(view: pd.DataFrame, record: ModelRecord) -> None:
+    """Precision/recall/F1 trade-off across decision thresholds + PR sweep."""
+
+    section_head("Threshold trade-off", "What the model gains or loses as the Priority cutoff moves")
+    st.caption(
+        "The default operating threshold is 0.50. Lowering it catches more Priority households "
+        "at the cost of more false alarms; raising it does the opposite. Metrics are survey-weighted "
+        "on the same deterministic held-out fold."
+    )
+    table = holdout_view(view, record.model_name)
+    curve = pr_curve(table)
+
+    trade_left, trade_right = st.columns([1.1, .9])
+    with trade_left:
+        st.dataframe(threshold_metrics(table), hide_index=True, width="stretch", height=230)
+        st.caption("Word of caution: pick the operating threshold from programme costs and capacity, not from the highest number alone.")
+    with trade_right:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["precision"], mode="lines+markers",
+                                 name="Weighted precision", line=dict(color="#3155d4", width=3), hovertemplate="threshold %{x:.2f} · precision %{y:.2f}<extra></extra>"))
+        fig.add_trace(go.Scatter(x=curve["threshold"], y=curve["recall"], mode="lines+markers",
+                                 name="Weighted recall", line=dict(color="#e5ae2f", width=3), hovertemplate="threshold %{x:.2f} · recall %{y:.2f}<extra></extra>"))
+        fig.update_xaxes(tickformat=".1f", title=None)
+        fig.update_yaxes(tickformat=".0%", range=[0, 1.02])
+        chart_theme(fig, 300, legend=True)
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+def render_subgroup_performance(view: pd.DataFrame, record: ModelRecord) -> None:
+    """Held-out model quality by province / setting / respondent sex."""
+
+    section_head("Subgroup model performance", "A model is only usable where it performs")
+    st.caption(
+        "Held-out metrics split by committee-relevant lenses. AUC is reported only where both "
+        "classes are present in the subgroup; cells below 150 held-out records are flagged as "
+        "low evidence. These are predictive associations on resampled rows, not subgroup effects."
+    )
+    table = holdout_view(view, record.model_name)
+    dimension = st.selectbox(
+        "Split by",
+        (("Province", "province"), ("Setting", "setting"), ("Respondent sex", "sex")),
+        format_func=lambda item: item[0],
+        key="subgroup_dimension",
+    )
+    st.dataframe(subgroup_performance(table, dimension[1]), hide_index=True, width="stretch", height=280)
+
+
+def render_predictive_insights(df: pd.DataFrame) -> None:
+    """06 / Predictive insights: the full model readout as a first-class page."""
+
+    page_intro(
+        "06 / Predictive insights",
+        "One honest predictive model, examined from every side.",
+        "Candidate selection, the held-out scorecard, how the trade-off shifts with the decision threshold, and where the model performs or struggles across provinces and settings. A predictive association over resampled rows — never eligibility.",
+    )
+    view = filter_bar(df, "predictive")
+    if not has_data(view):
+        return
+
+    render_model_evaluation_tab(view)
+    record = evaluate_model_workload(view)
+    if record is None:
+        return
+
+    render_threshold_tradeoff(view, record)
+    render_subgroup_performance(view, record)
+    data_footer(view)
 
 
 def render_overview(df: pd.DataFrame) -> None:
@@ -534,7 +560,7 @@ def render_overview(df: pd.DataFrame) -> None:
     with m3: metric_card("Emergency buffer", pct(emergency), "have set aside rainy-day funds", "◌", "yellow", delay=2)
     with m4: metric_card("Income pressure", pct(pressure), "income does not cover living costs monthly or often", "!", "rose", delay=3)
 
-    overview_tabs = st.tabs(["National signal", "Opportunity map", "Train & predict"])
+    overview_tabs = st.tabs(["National signal", "Opportunity map"])
     with overview_tabs[0]:
         section_head("The national signal, at a glance", "Weighted household estimates · use the hover state to inspect exact values")
         left, right = st.columns([1.25, .75])
@@ -570,77 +596,6 @@ def render_overview(df: pd.DataFrame) -> None:
             st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 02 · resilience</div><div class="insight-text">{pct(1 - emergency)} report no emergency fund.</div><div class="insight-foot">The inclusion gap is not only account ownership; it is the ability to absorb a shock without selling assets or borrowing.</div></div>', unsafe_allow_html=True)
         with c:
             st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
-
-    with overview_tabs[2]:
-        section_head("Train a prioritisation model", "Estimate the likelihood that a household falls into the Priority resilience band")
-        st.caption("This exploratory model is trained on the current filtered view. It is descriptive, not causal, and should not be used as an eligibility decision on its own.")
-        with st.form("priority_model_form"):
-            input_left, input_right = st.columns(2)
-            with input_left:
-                household_size = st.number_input("Household size", min_value=1, max_value=30, value=4, step=1)
-                respondent_sex = st.selectbox("Respondent sex", ["Female", "Male"])
-                setting = st.selectbox("Setting", ["Rural", "Urban"])
-            with input_right:
-                internet_access = st.selectbox("Internet access", ["No", "Yes"])
-                phone_ownership = st.selectbox("Phone ownership", ["No", "Yes"])
-                mobile_money_use = st.selectbox("Mobile money use", ["No", "Yes"])
-            train_and_predict = st.form_submit_button("Train model and predict", type="primary")
-
-        if train_and_predict:
-            model = train_priority_model(view)
-            if model is None:
-                st.session_state.pop("priority_model", None)
-                st.session_state.pop("priority_prediction", None)
-                st.error("The filtered view does not contain enough target variation to train this model.")
-            else:
-                prediction_values = {
-                    "hh_size": float(household_size),
-                    "b2": 1.0 if respondent_sex == "Male" else 2.0,
-                    "a6": 1.0 if setting == "Urban" else 2.0,
-                    "c14_5": 1.0 if internet_access == "Yes" else 2.0,
-                    "f3": 1.0 if phone_ownership == "Yes" else 2.0,
-                    "qf4_05": 1.0 if mobile_money_use == "Yes" else 2.0,
-                }
-                st.session_state["priority_model"] = model
-                st.session_state["priority_prediction"] = predict_priority_probability(model, prediction_values)
-
-        model = st.session_state.get("priority_model")
-        prediction = st.session_state.get("priority_prediction")
-        if model is not None and prediction is not None:
-            result_left, result_right, result_cv, result_cm = st.columns(4)
-            with result_left:
-                st.metric("Predicted Priority probability", f"{prediction:.1%}")
-            with result_right:
-                st.metric("Holdout accuracy", f"{model['accuracy']:.1%}")
-            with result_cv:
-                cm = model["confusion"]
-                st.metric("Holdout balanced acc", f"{(cm['tp'] / max(1, cm['tp'] + cm['fn']) + cm['tn'] / max(1, cm['tn'] + cm['fp'])) / 2:.1%}")
-            with result_cm:
-                st.metric("Holdout rows", f"{model['test_rows']:,}")
-            st.caption(f"Trained on {model['train_rows']:,} records and evaluated on {model['test_rows']:,} held-out records using household weights. Confusion at the 0.5 threshold: TP {cm['tp']} · FP {cm['fp']} · TN {cm['tn']} · FN {cm['fn']}.")
-
-            evidence_left, evidence_right = st.columns([1.1, .9])
-            with evidence_left:
-                st.markdown('<div class="section-title">Cross-validated stability</div><div class="section-note">Same estimator, 5-fold shuffled CV on the filtered view</div>', unsafe_allow_html=True)
-                cv = cross_validated_metrics(view)
-                if cv is not None:
-                    cv_table = pd.DataFrame({
-                        "Fold": [f"{i + 1}" for i in range(cv["folds"])],
-                        "Weighted accuracy": [f"{v:.1%}" for v in cv["acc_folds"]],
-                        "Weighted AUC": [f"{v:.3f}" if np.isfinite(v) else "—" for v in cv["auc_folds"]],
-                    })
-                    st.dataframe(cv_table, hide_index=True, width="stretch", height=180)
-                    st.caption(f"Mean accuracy {cv['acc_mean']:.1%} ± {cv['acc_sd']:.1%} · mean AUC {cv['auc_mean']:.3f} ± {cv['auc_sd']:.3f}. Coefficient drift across folds: {cv['coef_stability']:.3f} (max sd over standardized coefficients).")
-                else:
-                    st.caption("Not enough rows in this filtered view for a meaningful 5-fold CV; holdout numbers above stand alone.")
-            with evidence_right:
-                st.markdown('<div class="section-title">What drives the prediction</div><div class="section-note">Standardized coefficients · sign, not causality</div>', unsafe_allow_html=True)
-                coef_table = pd.DataFrame({
-                    "Feature": model["feature_labels"],
-                    "Coefficient": [f"{c:+.3f}" for c in model["coefficients"][1:]],
-                })
-                st.dataframe(coef_table, hide_index=True, width="stretch", height=180)
-            st.caption("What is still true: this is a descriptive, weighted-statistics model on resampled rows — no survey-design standard error and no causal claim. It must not be used as an eligibility decision on its own.")
 
     data_footer(view)
 
@@ -957,7 +912,7 @@ EXPLORER_VARS = {
 
 def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> None:
     page_intro(
-        "06 / Data explorer",
+        "08 / Data explorer",
         "Keep the evidence one click away.",
         "Inspect aggregate evidence behind every headline. Pick a measure, break it down by a demographic or geographic dimension, and keep household-level records protected by default.",
     )
@@ -1039,7 +994,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
 
 def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
     page_intro(
-        "08 / Methods & sources",
+        "09 / Methods & sources",
         "A traceable route from source file to displayed result.",
         "This page separates what is known about the supplied materials, what the application calculated, and what still needs research governance or documentation before publication.",
     )
@@ -1079,7 +1034,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
 
 def render_about(df: pd.DataFrame) -> None:
     page_intro(
-        "09 / About the build",
+        "10 / About the build",
         "A competition-ready decision tool, grounded in NISR data.",
         "InsightRwanda translates a large financial-inclusion survey into a presentation-ready interface for policy teams, financial-service providers and civil-society partners.",
     )
@@ -1300,8 +1255,9 @@ def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, che
     """One non-gated, take-away brief for this page: aggregate-only PNG + one-page PDF."""
 
     view = _lens_view(df, page)
+    context_record = evaluate_model_workload(view) if page == "Predictive insights" else None
     try:
-        brief = build_page_brief(page, view, profile, checks)
+        brief = build_page_brief(page, view, profile, checks, context_record)
     except Exception as exc:  # briefs must never break a page
         st.warning(f"Brief export unavailable for this page: {exc}")
         return
@@ -1355,6 +1311,8 @@ def main() -> None:
         render_regional(df)
     elif page == "Resilience lab":
         render_resilience(df)
+    elif page == "Predictive insights":
+        render_predictive_insights(df)
     elif page == "Data quality":
         render_quality(df, profile, checks)
     elif page == "Data explorer":

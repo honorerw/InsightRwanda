@@ -68,7 +68,7 @@ async def cdp_screenshot_and_dom() -> tuple[bytes, str]:
         while time.monotonic() < deadline:
             await asyncio.sleep(3)
             await ws.send(json.dumps({"id": 3, "method": "Runtime.evaluate", "params": {
-                "expression": "document.body ? document.body.innerText.slice(0, 5000) : 'LOADING'", "returnByValue": True,
+                "expression": "document.body ? document.body.innerText.slice(0, 12000) : 'LOADING'", "returnByValue": True,
             }}))
             while True:
                 message = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))

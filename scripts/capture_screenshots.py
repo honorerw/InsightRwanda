@@ -32,6 +32,7 @@ PAGES: list[tuple[str, str]] = [
     ("Poverty insights", "what the evidence can"),
     ("Geographic insights", "geography of exclusion"),
     ("Resilience lab", "most exposed to the next shock"),
+    ("Predictive insights", "One honest predictive model"),
     ("Data quality", "what was checked"),
     ("Data explorer", "Keep the evidence one click"),
     ("Methods & sources", "traceable route"),
@@ -109,7 +110,8 @@ async def main() -> int:
         await asyncio.sleep(12)  # first render incl. pipeline load
 
         for index, (nav, marker) in enumerate(PAGES):
-            result = await call("Runtime.evaluate", {"expression": CLICK_JS % (9, 9, index, index), "returnByValue": True})
+            expected_buttons = len(PAGES)
+            result = await call("Runtime.evaluate", {"expression": CLICK_JS % (expected_buttons, expected_buttons, index, index), "returnByValue": True})
             click_note = result["result"].get("result", {}).get("value", "no-result")
             await asyncio.sleep(2)
             deadline = time.monotonic() + 60
@@ -135,7 +137,7 @@ async def main() -> int:
     if failures:
         print(f"\nCAPTURE FAILED for: {failures}")
         return 1
-    print("\nCAPTURE PASSED: 9/9 pages.")
+    print(f"\nCAPTURE PASSED: {len(PAGES)}/{len(PAGES)} pages.")
     return 0
 
 

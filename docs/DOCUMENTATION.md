@@ -3,7 +3,7 @@
 **Project:** InsightRwanda · Financial Inclusion & Poverty Research Analytics
 **Context:** NISR 2026 Big Data Hackathon — Track 2 (Financial Inclusion & Poverty Reduction in Rwanda)
 **Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18
-**Current state at documentation time:** 39/39 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract) and the per-page briefs layer (one-page PDF/PNG exports). Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
+**Current state at documentation time:** 52/52 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG exports), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
 
 > Verified at a recent audit: SHA-256 `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae` · analysis version `financial_inclusion_135869b472e3`
 
@@ -220,7 +220,27 @@ Structural and analytical-slice checks. These describe **data structure and codi
 
 ---
 
-### 4.4 `research/estimation.py`
+### 4.4 `research/modeling.py`
+
+Real predictive-analytics workflow (scikit-learn 1.9). Task: predict the Priority resilience band (versus Watch/Resilient) from features that do not define it.
+
+| Piece | Behaviour |
+|---|---|
+| `build_model_frame(frame)` | Assembles features/target; raises loudly if any target-defining column (resilience_band, resilience_score, emergency_fund, owns_money, saves_regularly, social_safety_net) is used as a feature — the leakage guard. Unknown bands and unusable weights are excluded. |
+| `evaluate_candidates(frame)` | Group-stratified 5-fold CV (`StratifiedGroupKFold` on the respondent `key`): majority-class baseline vs logistic regression, decision tree (depth 5), Hist gradient boosting. All metrics carry `hh_wt` via `sample_weight`; deterministic per seed 42. |
+| `train_final_model(frame)` | Selects by mean CV weighted F1 (baseline excluded), refits, and evaluates once on a held-out fold: weighted ROC-AUC, F1, precision, recall, accuracy, log loss, Brier, unweighted confusion counts, calibration table (5 quantile bins), permutation importance (AUC drop, 8 repeats), and a provenance dict (candidates, folds, seed, positive class, threshold, split rule, weight rule). |
+| `predict_priority(record, values)` | Prediction for a composed household; unentered features fall back to training-typical values. |
+
+| Page-surface helpers (added 2026-10-23 for the dedicated Predictive insights page) | |
+|---|---|
+| `holdout_artifacts(frame, record)` | Rebuilds the seeded held-out fold and returns scored rows (truth, probability, `hh_wt`, province/setting/sex) — the backing table for threshold and subgroup views. |
+| `threshold_metrics(table, thresholds=(.3,.4,.5,.6,.7))` | Weighted precision/recall/F1 and predicted-Positive share at fixed thresholds. |
+| `pr_curve(table, steps=19)` | Precision/recall pairs across a probability sweep for charting. |
+| `subgroup_performance(table, by, min_n=150)` | Held-out metrics per subgroup; AUC gated on both classes present; cells below `min_n` flagged `Low evidence`. |
+
+Real-data result reported by the app (seed 42, 5 folds, 13,994 usable records): selected model **Hist gradient boosting**; CV weighted F1 0.656 ± 0.010, CV weighted ROC-AUC 0.773 ± 0.011 (baseline: F1 0.000, AUC 0.500); held-out-fold weighted F1 0.648, ROC-AUC 0.762, Brier 0.200 against a 39.9% weighted base rate. All results are predictive associations on resampled rows — not survey-design standard errors and not causal claims.
+
+### 4.5 `research/estimation.py`
 
 Estimation layer (added 2026-10-19): interval estimates, income-band context estimates and the official-poverty unlock contract. No UI code.
 
@@ -273,11 +293,12 @@ Streamlit presentation layer (~1,000 lines) with a custom brand styling system �
 
 ### Pages (via the custom sidebar button rail)
 
-The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **Evidence** (01 Overview · 02 Financial inclusion · 03 Poverty insights · 04 Geographic insights · 05 Resilience lab), **Governance** (06 Data quality · 07 Data explorer), **How it is built** (08 Methods & sources · 09 About the build) — where every entry number matches that page's own `0N /` eyebrow, followed by context cards (dataset status and reading guidance).
+The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **Evidence** (01 Overview · 02 Financial inclusion · 03 Poverty insights · 04 Geographic insights · 05 Resilience lab · 06 Predictive insights), **Governance** (07 Data quality · 08 Data explorer), **How it is built** (09 Methods & sources · 10 About the build) — where every entry number matches that page's own `0N /` eyebrow, followed by context cards (dataset status and reading guidance).
 
 | Page | What it shows |
 |---|---|
-| **Overview** | Weighted KPI cards (Active formal access, Mobile money, Emergency buffer, Income pressure), 3 tabs: National signal (bar + resilience-lite mix donut), Opportunity map (3 narrative signal cards), Train & predict (exploratory logistic model on a small feature set). |
+| **Overview** | Weighted KPI cards (Active formal access, Mobile money, Emergency buffer, Income pressure), 2 tabs: National signal (bar + resilience-lite mix donut) and Opportunity map (3 narrative signal cards). Model work has its own page. |
+| **Predictive insights** | The full model readout as a first-class page: candidate-comparison CV table, selected-model holdout metrics + base rate, calibration table, permutation importance, holdout confusion counts, the composed-household prediction form, **threshold trade-off** (weighted precision/recall/F1 at 0.3–0.7 plus a precision-vs-recall sweep chart) and **subgroup performance** (held-out AUC/F1/recall per province, setting, respondent sex, with low-evidence flags). Delegates to `render_model_evaluation_tab` so the two surfaces share provenance. |
 | **Financial inclusion** | Four KPI cards (FI-01 to FI-04), horizontal weighted bar chart of all six indicators, indicator-detail inspector (definition, calculation, source variables, limitations), full indicator registry dataframe, footer showing source variables vs loaded rows. |
 | **Poverty insights** | Explicit status callout + "Exact blockers" table (Poverty concept / Welfare aggregate / Survey methodology / Authorization — all currently blocked). Non-poverty context metrics only (FI-04, FI-05) clearly labelled "not an official poverty measure". |
 | **Geographic insights** | Active access by province (bar), 3-signal grouped bar (access / emergency / internet), district explorer table with decision cue (highest vs lowest access). |
@@ -286,7 +307,7 @@ The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **
 | **Data explorer** | **Governance-gated.** If `aggregate_release_allowed(profile)` is `False`, shows a callout saying output is withheld and returns early. Otherwise offers measure selection, dimension breakdown and a weighted aggregate table + CSV download (only when publication status is Approved). |
 | **Methods & sources** | Full source profile table, five-step evidence chain (Inspect → Load → Validate → Calculate → Explain), documentation list, governance boundary callout, weighted-methodology registry. |
 
-| **About the build** (*Navbar entry: “About the build”, `render_about`*) | Product thesis (the challenge), stack overview (4 components), method-transparency cards (weighted estimates, resilience lens, data integrity), hackathon alignment table, footer. Numbered "09" in the page-eyebrow sequence. |
+| **About the build** (*Navbar entry: “About the build”, `render_about`*) | Product thesis (the challenge), stack overview (4 components), method-transparency cards (weighted estimates, resilience lens, data integrity), hackathon alignment table, footer. Numbered "10" in the page-eyebrow sequence. |
 
 *(Previously `render_about` existed but was not wired into navigation; as of the 2026-10-19 fix it is a live nav entry.)*
 
@@ -312,9 +333,16 @@ Three native `@st.dialog` modals, opened via in-page buttons:
 
 Motion design: staggered card entrances (`metric-card exercise data-delay`, `chart-card`/`filter-shell`/`page-intro` CSS delays), all CSS-only, plus a global `@media (prefers-reduced-motion: reduce)` guard that disables every animation for users (and judges) who request it. No `data-testid` selectors are used for motion, so Streamlit internals can change without breaking the visuals.
 
-### Exploratory "Train & predict" model (Overview tab)
+### Predictive insights page (model readout)
 
-Small weighted logistic regression over 6 features (`hh_size`, `b2`, `a6`, `c14_5`, `f3`, `qf4_05`), trained on the current filtered view with an 80/20 holdout split (seed 42), reporting predict-priority probability and holdout accuracy. **Explicitly not a poverty or eligibility model** — the UI caption marks it as descriptive.
+The predictive workflow was moved out of the Overview into its own page (`06 / Predictive insights`, `render_predictive_insights`) with two analysis surfaces added on top of the shared `render_model_evaluation_tab` readout:
+
+- **Threshold trade-off** (`render_threshold_tradeoff`): weighted precision/recall/F1 at thresholds 0.3–0.7 and a precision-vs-recall sweep across the probability range, computed on the deterministic held-out fold (`holdout_artifacts`).
+- **Subgroup performance** (`render_subgroup_performance`): held-out weighted F1, recall and ROC-AUC (AUC only where both classes exist) split by province, setting or respondent sex, with cells below 150 held-out records flagged as low evidence (`subgroup_performance`).
+
+**Explicitly not a poverty or eligibility model** — the page captions mark every figure as a predictive association on resampled rows.
+
+The page inherits the Overview's lens filter behaviour (prefix `predictive`) and its page brief reuses the cached model record (`build_page_brief(..., model_record=...)`) so brief export never refits.
 
 ---
 
@@ -348,7 +376,7 @@ Real-source test suite:
 python -m unittest discover -s tests -v
 ```
 
-### Test suite status (final, 2026-10-19)
+### Test suite status (current, 2026-10-23)
 
 26 tests total (13 original + 13 estimation tests). Executed again after the estimation layer was added:
 
@@ -359,7 +387,7 @@ python -m unittest discover -s tests -v
 - **Side effect of the fix:** the `analysis_version` fingerprint naturally changed to `financial_inclusion_f43dfd9a140b` (its design behaviour: it re-fingerprints whenever research logic changes). The README's audit record was synced accordingly; the previous audit value was `financial_inclusion_135869b472e3`.
 - Additional polish applied in the same pass: `select_dtypes` updated to `include=["object", "str"]` to silence the pandas 4.0 `Pandas4Warning`, and "About the build" was wired into the sidebar navigation (previously dead code).
 
-> **Status:** fully green — 39/39 tests pass (original suite + estimation suite + briefs suite). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080`.
+> **Status:** fully green — 52/52 tests pass (original suite + estimation + briefs + real predictive-modeling suite + the page-surface artifact suite for the Predictive insights page). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080` (unchanged — the fingerprint covers data_pipeline, indicators, quality and estimation only).
 
 ### Notable interpretation limit
 
