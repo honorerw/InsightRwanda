@@ -51,6 +51,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 :root {
     --ink: #17213d;
     --muted: #66718b;
@@ -66,7 +67,7 @@ st.markdown(
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body, [class*="css"] { font-family: 'Lato', 'Arial', sans-serif; color: var(--ink); }
+html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif; color: var(--ink); }
 body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 .stApp { background: var(--paper); }
 header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
@@ -92,17 +93,18 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 [data-testid="stSidebar"] * { color: #effaf6; }
 [data-testid="stSidebar"] hr { border-color: #397368; margin: 1rem 0; }
 .side-brand { display:flex; align-items:center; gap:.65rem; padding:.25rem .35rem .85rem; }
-.side-mark { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:11px; background:#9ce0c6; color:#123c36; font-family:Georgia, 'Times New Roman', serif; font-weight:800; box-shadow:0 8px 22px rgba(0,0,0,.16); }
-.side-name { font-family:Georgia, 'Times New Roman', serif; font-size:1rem; font-weight:700; letter-spacing:-.025em; }
+.side-mark { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:11px; background:#9ce0c6; color:#123c36; font-family:'Lora', Georgia, 'Times New Roman', serif; font-weight:700; box-shadow:0 8px 22px rgba(0,0,0,.16); }
+.side-name { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.02rem; font-weight:600; letter-spacing:-.02em; }
 [data-testid="stSidebar"] .side-caption { color:#b3d8cc !important; font-size:.67rem; margin-top:.12rem; }
-[data-testid="stSidebar"] .side-label { color:#9bc5b8 !important; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.11em; font-size:.61rem; font-weight:500; margin:.2rem .35rem .45rem; }
-[data-testid="stSidebar"] .stRadio, [data-testid="stSidebar"] .stRadio > div, [data-testid="stSidebar"] .stRadio > div > div, [data-testid="stSidebar"] .stRadio [role="radiogroup"] { width:100% !important; max-width:none !important; }
-[data-testid="stSidebar"] .stRadio [role="radiogroup"] { display:flex !important; flex-direction:column !important; align-items:stretch !important; }
-[data-testid="stSidebar"] .stRadio label { display:flex !important; width:100% !important; max-width:none !important; align-self:stretch !important; position:relative; overflow:hidden; border:1px solid transparent; border-radius:10px; padding:.6rem .65rem; color:#c8e3da; font-size:.8rem; font-weight:600; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
-[data-testid="stSidebar"] .stRadio label:not(:has(input:checked)):hover { background:#286358; border-color:#4c8b7d; color:#fff; transform:translateX(4px); box-shadow:0 5px 14px rgba(0,0,0,.12); }
-[data-testid="stSidebar"] .stRadio label:not(:has(input:checked)):active { background:#9ce0c6; border-color:#bcebd5; color:#123c36; transform:translateX(2px) scale(.98); box-shadow:inset 0 2px 5px rgba(18,60,54,.18); }
-[data-testid="stSidebar"] .stRadio label:has(input:checked) { width:calc(100% + 1.9rem) !important; margin-left:-.95rem; background:#9ce0c6; border-color:#bcebd5; color:#123c36; box-shadow:0 5px 14px rgba(0,0,0,.1); }
-[data-testid="stSidebar"] .stRadio label > div:first-child { display:none; }
+[data-testid="stSidebar"] .side-label { color:#9bc5b8 !important; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.11em; font-size:.62rem; font-weight:600; margin:.95rem .35rem .45rem; }
+[data-testid="stSidebar"] .side-label:first-of-type { margin-top:.15rem; }
+[data-testid="stSidebar"] .stButton { width:100%; margin:.1rem 0; }
+[data-testid="stSidebar"] .stButton button { width:100% !important; display:flex; align-items:center; gap:.55rem; justify-content:flex-start; text-align:left; border:1px solid transparent; border-radius:10px; background:transparent; color:#c8e3da; font-size:.795rem; font-weight:600; padding:.58rem .72rem; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
+[data-testid="stSidebar"] .stButton button p { font-size:.795rem; font-weight:600; }
+[data-testid="stSidebar"] .stButton button[kind="secondary"]:hover, [data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#286358; border-color:#4c8b7d; color:#fff; }
+[data-testid="stSidebar"] .stButton button[kind="secondary"]:active { transform:translateX(2px) scale(.99); }
+[data-testid="stSidebar"] .stButton button[kind="primary"] { background:#9ce0c6; border-color:#bcebd5; color:#123c36; box-shadow:0 5px 14px rgba(0,0,0,.1); }
+[data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#9ce0c6; color:#123c36; transform:translateX(3px); box-shadow:0 6px 16px rgba(0,0,0,.16); }
 .side-card { border:1px solid #397368; background:#205148; border-radius:12px; padding:.75rem .8rem; margin-top:.45rem; }
 .side-card-title { font-size:.72rem; font-weight:700; color:#effaf6 !important; }
 .side-card-copy { font-size:.67rem; line-height:1.45; color:#c0ded4 !important; margin-top:.28rem; }
@@ -112,31 +114,24 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 
 .app-header { display:flex; align-items:center; justify-content:space-between; padding: .15rem .1rem 1.15rem; border-bottom: 1px solid var(--line); margin-bottom: 1.55rem; }
 .brand { display:flex; align-items:center; gap:.75rem; }
-.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #5274e6, #172554); color:white; display:flex; align-items:center; justify-content:center; font-family:Georgia, 'Times New Roman', serif; font-size: 1.25rem; font-weight:800; box-shadow: 0 8px 20px rgba(49,85,212,.22); }
-.brand-name { font-family:Georgia, 'Times New Roman', serif; font-size:1.16rem; font-weight:700; letter-spacing:-.02em; }
+.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #5274e6, #172554); color:white; display:flex; align-items:center; justify-content:center; font-family:'Lora', Georgia, 'Times New Roman', serif; font-size: 1.2rem; font-weight:700; box-shadow: 0 8px 20px rgba(49,85,212,.22); }
+.brand-name { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.16rem; font-weight:600; letter-spacing:-.02em; }
 .brand-sub { color: var(--muted); font-size:.72rem; margin-top:.12rem; }
 .header-meta { display:flex; align-items:center; gap:.75rem; color:var(--muted); font-size:.77rem; }
 .live-pill { display:flex; align-items:center; gap:.38rem; border:1px solid #cbd5ff; color:var(--green-dark); background:#f0f3ff; border-radius:999px; padding:.4rem .72rem; font-weight:700; box-shadow:0 3px 10px rgba(49,85,212,.06); }
 .live-dot { width:7px; height:7px; background:#5274e6; border-radius:50%; box-shadow:0 0 0 4px #dbe2ff; }
 
-.stRadio > div { gap: .3rem; }
-.stRadio [role="radiogroup"] { gap: .25rem; }
-.stRadio label { border-radius: 8px; padding: .43rem .75rem; color: var(--muted); font-size:.83rem; font-weight:600; transition:.15s ease; }
-.stRadio label:hover { background: #eef1fb; color: var(--ink); }
-.stRadio label:has(input:checked) { color: var(--green-dark); background: var(--mint); }
-.stRadio label > div:first-child { display:none; }
-
-.eyebrow { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
+.eyebrow { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
 .page-intro { padding: .15rem 0 .2rem; }
-.page-title { font-family:Georgia, 'Times New Roman', serif; font-size:2.55rem; line-height:1.08; letter-spacing:-.045em; font-weight:700; margin:0; color:var(--ink); }
+.page-title { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:2.45rem; line-height:1.1; letter-spacing:-.03em; font-weight:600; margin:0; color:var(--ink); }
 .page-lede { color:var(--muted); font-size:.98rem; line-height:1.55; max-width:720px; margin:.65rem 0 1.2rem; }
-.section-title { font-family:Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:700; letter-spacing:-.015em; margin:0; }
+.section-title { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:600; letter-spacing:-.01em; margin:0; }
 .section-note { color:var(--muted); font-size:.77rem; margin:.25rem 0 .9rem; }
 .section-head { display:flex; justify-content:space-between; align-items:flex-end; margin: 1.55rem 0 .75rem; }
-.mono { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; }
+.mono { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; }
 
 .filter-shell { background:linear-gradient(135deg, #f0f3ff, #e9edfb); border:1px solid #d5dcf2; border-radius:15px; padding:.85rem 1rem .18rem; margin:.55rem 0 1.25rem; box-shadow:0 5px 18px rgba(37,56,110,.05); }
-.filter-label { font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--green-dark); font-size:.64rem; margin-bottom:.25rem; }
+.filter-label { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--green-dark); font-size:.64rem; margin-bottom:.25rem; font-weight:500; }
 [data-testid="stSelectbox"] label, [data-testid="stSlider"] label { color:var(--muted); font-size:.73rem; font-weight:600; }
 [data-testid="stSelectbox"] > div > div { background:#fff; border-color:#d5dcef; border-radius:10px; min-height:40px; box-shadow:0 2px 8px rgba(37,56,110,.045); }
 
@@ -145,7 +140,7 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 .metric-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.55rem; }
 .metric-label { color:var(--muted); font-size:.76rem; font-weight:600; line-height:1.25; }
 .metric-icon { width:29px; height:29px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:.92rem; }
-.metric-value { font-family:Georgia, 'Times New Roman', serif; font-size:1.84rem; letter-spacing:-.04em; font-weight:700; font-variant-numeric:tabular-nums; }
+.metric-value { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.84rem; letter-spacing:-.025em; font-weight:600; font-variant-numeric:tabular-nums; }
 .metric-foot { color:var(--muted); font-size:.7rem; margin-top:.25rem; line-height:1.25; }
 .metric-card.green .metric-icon { background:#e8edff; color:var(--green); }
 .metric-card.green .metric-value { color:var(--green-dark); }
@@ -159,8 +154,8 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 .chart-card { background:var(--card); border:1px solid var(--line); border-radius:17px; padding:1.05rem 1.08rem .78rem; box-shadow:0 6px 22px rgba(37,56,110,.045); }
 .chart-card .stPlotlyChart { margin-top:.35rem; }
 .insight-card { border-radius:16px; padding:1.05rem 1.15rem; background:var(--green-dark); color:white; min-height:128px; }
-.insight-kicker { color:#b7c6ff; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; text-transform:uppercase; letter-spacing:.1em; font-size:.63rem; }
-.insight-text { font-family:Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:700; line-height:1.33; margin-top:.45rem; }
+.insight-kicker { color:#b7c6ff; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.1em; font-size:.63rem; }
+.insight-text { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:600; line-height:1.33; margin-top:.45rem; }
 .insight-foot { color:#d7defb; font-size:.7rem; line-height:1.35; margin-top:.55rem; }
 
 .callout { border:1px solid #d1dafa; border-left:3px solid var(--green); background:#f0f3ff; border-radius:0 12px 12px 0; padding:.88rem 1rem; color:#354263; font-size:.84rem; line-height:1.5; }
@@ -174,7 +169,7 @@ header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important;
 .profile-name { width:148px; font-size:.76rem; color:var(--muted); }
 .profile-track { flex:1; height:9px; background:#e9edf7; border-radius:99px; overflow:hidden; }
 .profile-fill { height:100%; border-radius:99px; background:linear-gradient(90deg, #3155d4, #8ca4f0); }
-.profile-number { width:48px; text-align:right; font-family:'DejaVu Sans Mono','Liberation Mono',monospace; font-size:.72rem; color:var(--green-dark); }
+.profile-number { width:48px; text-align:right; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:.72rem; color:var(--green-dark); }
 
 .stDataFrame { border:1px solid var(--line); border-radius:13px; overflow:hidden; box-shadow:0 4px 16px rgba(37,56,110,.035); }
 [data-testid="stDataFrame"] { background:#fff; }
@@ -183,7 +178,7 @@ div[data-testid="stExpander"] { border-color:var(--line); border-radius:12px; ba
 button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--green-dark); font-weight:600; }
 
 .footer-note { color:#7c8983; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
-button, [role="button"] { font-family:'Lato', 'Arial', sans-serif; }
+button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
 @media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
 </style>
@@ -227,29 +222,48 @@ def app_header() -> None:
 
 
 def nav(df: pd.DataFrame) -> str:
-    pages = [
+    """Left rail as a coherent system: brand, three labelled nav groups with
+    numbered entries matching each page's own '0N /' eyebrow, then context cards."""
+    nav_pages = [
         "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
         "Resilience lab", "Data quality", "Data explorer", "Methods & sources",
         "About the build",
     ]
+    nav_groups = [
+        ("Evidence", nav_pages[:5]),
+        ("Governance", nav_pages[5:7]),
+        ("How it is built", nav_pages[7:]),
+    ]
+    numbers = {page: f"{index:02d}" for index, page in enumerate(nav_pages, start=1)}
+    current = st.session_state.get("workspace_nav", "Overview")
+    if current not in nav_pages:
+        current = "Overview"
     with st.sidebar:
         st.markdown(
             '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown('<div class="side-label">Workspace</div>', unsafe_allow_html=True)
-        choice = st.radio("Workspace", pages, label_visibility="collapsed", key="workspace_nav")
+        for group_label, group_pages in nav_groups:
+            st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
+            for page in group_pages:
+                pressed = st.button(
+                    f"{numbers[page]} · {page}",
+                    key=f"nav_{numbers[page]}",
+                    type="primary" if page == current else "secondary",
+                    width="stretch",
+                )
+                if pressed:
+                    current = page
+                    st.session_state["workspace_nav"] = page
         st.markdown('<hr>', unsafe_allow_html=True)
-        st.markdown('<div class="side-label">Dataset status</div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-label" style="margin-top:.1rem">Context</div>', unsafe_allow_html=True)
         st.markdown(
-            f'<div class="side-card"><div class="side-card-title">Dataset ready</div><div class="side-card-copy">The supplied Stata dataset is loaded read-only for weighted analytical work.</div><div class="side-status"><span class="side-status-dot"></span>{len(df):,} records loaded</div></div>',
+            f'<div class="side-card"><div class="side-card-title">Dataset loaded</div><div class="side-card-copy">Supplied NISR Stata file, read-only. Household-weighted with <span class="mono">hh_wt</span>; missing responses excluded from every indicator.</div><div class="side-status"><span class="side-status-dot"></span>{len(df):,} records ready</div></div>',
             unsafe_allow_html=True,
         )
-        st.markdown('<div class="side-card"><div class="side-card-title">Hackathon track</div><div class="side-card-copy">Track 2 · Financial Inclusion &amp; Poverty Reduction</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-label" style="margin-top:1.1rem">Reading the dashboard</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-card-copy" style="padding:0 .35rem">Rates are weighted with <span class="mono">hh_wt</span>. Missing responses are excluded from each indicator. The resilience lens is descriptive, not a causal model.</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-footer">Built for evidence-led decisions in Rwanda.<br>Source: supplied NISR dataset.</div>', unsafe_allow_html=True)
-    return choice
+        st.markdown('<div class="side-card"><div class="side-card-title">How to read the pages</div><div class="side-card-copy">Each page states its definitions, denominators and limits on the page itself. Estimates are descriptive — never causal claims.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-footer">Track 2 · Financial Inclusion &amp; Poverty Reduction · NISR Hackathon 2026.<br>Source: supplied NISR dataset.</div>', unsafe_allow_html=True)
+    return current
 
 
 def page_intro(eyebrow: str, title: str, lede: str) -> None:
@@ -301,10 +315,10 @@ def chart_theme(fig: go.Figure, height: int = 300, legend: bool = False) -> go.F
         margin=dict(l=4, r=8, t=12, b=8),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Lato, Arial, sans-serif", color="#66718b", size=11),
+        font=dict(family="Inter, Arial, sans-serif", color="#66718b", size=11),
         showlegend=legend,
         legend=dict(orientation="h", y=1.12, x=0),
-        hoverlabel=dict(bgcolor="#17213d", font_size=12, font_family="Lato"),
+        hoverlabel=dict(bgcolor="#17213d", font_size=12, font_family="Inter"),
     )
     fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#dce3ef", tickfont=dict(size=10))
     fig.update_yaxes(showgrid=True, gridcolor="#e8ecf5", zeroline=False, linecolor="rgba(0,0,0,0)", tickfont=dict(size=10))
@@ -550,7 +564,7 @@ def render_overview(df: pd.DataFrame) -> None:
             band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
             fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
             resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
-            fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Georgia"))
+            fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Lora, Georgia, serif"))
             st.plotly_chart(chart_theme(fig, 228), width="stretch", config={"displayModeBar": False})
             st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)

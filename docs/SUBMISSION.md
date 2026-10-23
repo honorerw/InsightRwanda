@@ -19,7 +19,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app opens on **Overview** and loads the supplied Stata source directly from `data/dataset.dta` — read-only, nothing to configure, no API keys.
+The app opens on **Overview** and loads the supplied Stata source directly from `data/dataset.dta` — read-only, nothing to configure, no API keys. The left rail is a grouped, numbered nav system (Evidence / Governance / How it is built) that matches each page's `0N /` eyebrow; the interface uses an Inter / Lora / JetBrains Mono webfont stack with offline fallbacks.
 
 To re-verify before judging (optional, ~5 s):
 

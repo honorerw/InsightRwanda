@@ -64,9 +64,10 @@ def page_target_url() -> str:
 
 CLICK_JS = """
 (() => {
-  const options = document.querySelectorAll('[data-testid="stRadioOption"]');
-  if (options.length !== %d) return 'OPTIONS_%d_EXPECTED_' + options.length;
-  options[%d].click();
+  const sidebar = document.querySelectorAll('[data-testid="stSidebar"] button');
+  const buttons = Array.from(sidebar).filter(b => b.innerText.trim().length > 0);
+  if (buttons.length !== %d) return 'OPTIONS_%d_EXPECTED_' + buttons.length;
+  buttons[%d].click();
   return 'CLICKED_%d';
 })()
 """

@@ -269,9 +269,11 @@ Current profile status (defaults, no approvals supplied):
 
 ## 5. Dashboard Reference — `app.py`
 
-Streamlit presentation layer (~890 lines) with custom brand styling, custom sidebar, hidden default header/footer/toolbar and a fully responsive CSS layout.
+Streamlit presentation layer (~1,000 lines) with a custom brand styling system — Google-font stack (Inter for UI text, Lora for display/serif numerals, JetBrains Mono for labels, all with offline fallbacks), tamper-evident custom sidebar, hidden default header/footer/toolbar and a fully responsive CSS layout.
 
-### Pages (via the custom sidebar radio)
+### Pages (via the custom sidebar button rail)
+
+The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **Evidence** (01 Overview · 02 Financial inclusion · 03 Poverty insights · 04 Geographic insights · 05 Resilience lab), **Governance** (06 Data quality · 07 Data explorer), **How it is built** (08 Methods & sources · 09 About the build) — where every entry number matches that page's own `0N /` eyebrow, followed by context cards (dataset status and reading guidance).
 
 | Page | What it shows |
 |---|---|
