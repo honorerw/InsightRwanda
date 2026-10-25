@@ -49,6 +49,7 @@ from research.briefs import (
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import AssistantAnswer, answer_question
+from research.assistant_llm import get_configured_provider, refine_answer
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -1544,6 +1545,10 @@ def _ask_submit(question: str | None, df: pd.DataFrame, profile: SourceProfile, 
         })
         st.session_state["ask_input"] = ""
         return
+    # Phase C3 — optional AI explanation layer. Disabled with no approved
+    # provider: get_configured_provider() is None and refine_answer returns
+    # the deterministic answer unchanged, with its original references.
+    answer = refine_answer(question, answer, get_configured_provider())
     messages.append({
         "role": "assistant",
         "content": answer.answer,
