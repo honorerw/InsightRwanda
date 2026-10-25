@@ -156,7 +156,7 @@ def _build_overview(view: pd.DataFrame, profile: SourceProfile | None) -> PageBr
         ),
         kpis=(
             ("Active formal access", _pct(active), "currently use at least one formal channel"),
-            ("Mobile money anchor", _pct(mobile), "currently use a mobile money operator"),
+            ("Mobile money", _pct(mobile), "currently use a mobile money operator"),
             ("Emergency buffer", _pct(emergency), "have set aside rainy-day funds"),
             ("Income pressure", _pct(pressure), "income does not cover costs monthly or often"),
             ("Resilient band", _pct(bands["Resilient"]), "households scoring high on the lens"),

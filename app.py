@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -47,6 +48,7 @@ from research.briefs import (
 )
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.quality import QualityCheck, quality_summary, run_quality_checks
+from research.assistant import AssistantAnswer, answer_question
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -55,11 +57,11 @@ SPSS_PATH = APP_DIR / "data" / "Rwanda FinScope 2020_Final Data.sav"
 
 SOURCE_OPTIONS = (
     ("master", "dataset.dta (master) · 13,994 households"),
-    ("spss", "FinScope 2020 SPSS · 12,480 patterns"),
+    ("spss", "FinScope 2020 SPSS · 12,480 respondents"),
 )
 SOURCE_LABELS = {
-    "master": "dataset.dta (master Stata source)",
-    "spss": "Rwanda FinScope 2020_Final Data.sav (SPSS source)",
+    "master": "Master Stata survey · 13,994 households",
+    "spss": "FinScope 2020 survey · 12,480 respondents",
 }
 SOURCE_SOURCE_IDs = {"master": "supplied_dataset_dta", "spss": SPSS_SOURCE_ID}
 
@@ -100,7 +102,15 @@ st.markdown(
 html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif; color: var(--ink); }
 body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 .stApp { background: var(--paper); }
-header, footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
+header[data-testid="stHeader"] { background: transparent !important; }
+footer { display: none !important; }
+/* Streamlit renders its sidebar expand control inside the top toolbar. Hiding the
+   toolbar wrapper would strand users on collapsed sidebars (mobile), so only the
+   deploy button, main menu and status spinner are hidden, never the expand control. */
+[data-testid="stToolbar"] [data-testid="stBaseButton-header"],
+[data-testid="stToolbar"] [data-testid="stMainMenuButton"],
+[data-testid="stToolbar"] [data-testid="stStatusWidget"],
+#MainMenu { display: none !important; }
 [data-testid="stAppViewContainer"] { background: var(--paper); }
 .block-container { max-width: 1480px; padding: 1.35rem 3.4rem 4.5rem; }
 .main .block-container { animation: rise-in .35s ease-out both; }
@@ -207,10 +217,41 @@ div[data-testid="stExpander"] { border-color:var(--line); border-radius:12px; ba
 .download-row { display:flex; justify-content:flex-end; margin-top:.45rem; }
 button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--green-dark); font-weight:600; }
 
-.footer-note { color:#7c8983; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
+.footer-note { color:#5f6866; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
 button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
+/* Ask InsightRwanda — header entry pill + conversation surfaces */
+.st-key-ask_zone { margin: -.9rem 0 .55rem; display: flex; justify-content: flex-end; }
+.st-key-ask_zone button { border-radius: 999px; font-weight: 600; font-size: .78rem; padding: .38rem 1rem; }
+.ask-intro { font-size: .8rem; color: var(--muted); margin: 0 0 .6rem; }
+.ask-q { background: var(--paper); border: 1px solid var(--line); border-radius: 10px 10px 3px 10px;
+  padding: .55rem .7rem; font-size: .84rem; max-width: 92%; word-wrap: break-word; }
+.ask-switch { background: #faf6ea; border: 1px dashed #cbbf8f; border-radius: 8px; padding: .45rem .65rem;
+  font-size: .75rem; color: #63593a; }
+.ask-state { font-size: .72rem; color: var(--muted); }
+
+/* Accessibility: a clearly visible keyboard-focus indicator in both color zones.
+   The blue works on the light surface; the dark sidebar rail needs the mint accent instead. */
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="radio"]:focus-visible,
+[role="option"]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green) !important; outline-offset: 2px; }
+[data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible { outline-color: #9ce0c6 !important; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
 @media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
+/* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
+@media (max-width: 640px) {
+  /* The top strip hosts Streamlit's sidebar expand control; keep page content clear of it */
+  .block-container { padding: 4.55rem .85rem 2.6rem; }
+  .app-header { flex-wrap: wrap; align-items:flex-start; gap:.3rem; }
+  .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
+  .brand-name { font-size:1.02rem; }
+  .page-title { font-size:1.7rem; }
+  .metric-card { padding:.9rem .85rem .85rem; min-height:116px; }
+  .metric-value { font-size:1.5rem; }
+  .metric-foot { font-size:.67rem; }
+  .filter-shell { padding:.7rem .7rem .1rem; }
+  .insight-card { min-height:auto; }
+  .chart-card { padding:.9rem .9rem .7rem; }
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -237,7 +278,7 @@ def pct(value: float, decimals: int = 0) -> str:
 # -----------------------------------------------------------------------------
 # UI helpers
 # -----------------------------------------------------------------------------
-def app_header() -> None:
+def app_header(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
     st.markdown(
         f"""
         <div class="app-header">
@@ -245,11 +286,16 @@ def app_header() -> None:
             <div class="brand-mark">◒</div>
             <div><div class="brand-name">InsightRwanda</div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
-          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> source: {SOURCE_LABELS[active_source()]}</div></div>
+          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> Survey data: {SOURCE_LABELS[active_source()]}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    # Ask InsightRwanda — header entry point for the offline evidence assistant.
+    # Main content placement keeps the sidebar's exact ten-button contract intact.
+    with st.container(key="ask_zone"):
+        if st.button("Ask InsightRwanda", key="ask_launch", icon=":material/forum:", help="Ask questions about the survey evidence in simple English"):
+            ask_insightrwanda_modal(df, profile, checks)
 
 
 def nav(df: pd.DataFrame) -> str:
@@ -261,9 +307,9 @@ def nav(df: pd.DataFrame) -> str:
         "Methods & sources", "About the build",
     ]
     nav_groups = [
-        ("Evidence", nav_pages[:6]),
-        ("Governance", nav_pages[6:8]),
-        ("How it is built", nav_pages[8:]),
+        ("Evidence", nav_pages[:6], "What the survey data shows"),
+        ("Governance", nav_pages[6:8], "Checks, access and data protection"),
+        ("How it is built", nav_pages[8:], "Methods, sources and background"),
     ]
     numbers = {page: f"{index:02d}" for index, page in enumerate(nav_pages, start=1)}
     current = st.session_state.get("workspace_nav", "Overview")
@@ -286,8 +332,9 @@ def nav(df: pd.DataFrame) -> str:
             label_visibility="collapsed",
         )
         st.session_state["analysis_source"] = keys[labels.index(choice)]
-        for group_label, group_pages in nav_groups:
+        for group_label, group_pages, group_hint in nav_groups:
             st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="side-caption">{group_hint}</div>', unsafe_allow_html=True)
             for page in group_pages:
                 pressed = st.button(
                     f"{numbers[page]} · {page}",
@@ -298,6 +345,20 @@ def nav(df: pd.DataFrame) -> str:
                 if pressed:
                     current = page
                     st.session_state["workspace_nav"] = page
+        st.markdown(
+            '<div class="side-card"><div class="side-card-title">Pages at a glance</div><div class="side-card-copy">'
+            "01 Overview — headline numbers for all of Rwanda<br>"
+            "02 Financial inclusion — the six verified measures<br>"
+            "03 Poverty insights — what the data can and cannot say<br>"
+            "04 Geographic insights — province and district comparisons<br>"
+            "05 Resilience lab — who can absorb a financial shock<br>"
+            "06 Predictive insights — a test model, with its limits<br>"
+            "07 Data quality — checks run before numbers are shown<br>"
+            "08 Data explorer — build your own summary tables<br>"
+            "09 Methods &amp; sources — where each number comes from<br>"
+            "10 About the build — purpose and honesty notes</div></div>",
+            unsafe_allow_html=True,
+        )
     return current
 
 
@@ -306,7 +367,7 @@ def page_intro(eyebrow: str, title: str, lede: str) -> None:
 
 
 def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
-    st.markdown('<div class="filter-shell"><div class="filter-label">Analysis lens</div>', unsafe_allow_html=True)
+    st.markdown('<div class="filter-shell"><div class="filter-label">Narrow the results</div><div class="section-note" style="margin:-.15rem 0 .45rem">Pick one area or group of people; every chart on this page updates to match.</div>', unsafe_allow_html=True)
     # Keys are scoped per source so a source switch never leaves a stale value stuck.
     tag = active_source()
     if tag == "master":
@@ -320,7 +381,7 @@ def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
     district_options = ["All districts"] + sorted(pre["district"].dropna().unique().tolist())
     district = c2.selectbox("District", district_options, key=f"{sk}_district")
     setting = c3.selectbox("Setting", ["All settings", "Urban", "Rural"], key=f"{sk}_setting")
-    sex = c4.selectbox("Respondent", ["All respondents", "Female", "Male"], key=f"{sk}_sex")
+    sex = c4.selectbox("Respondent sex", ["All respondents", "Female", "Male"], key=f"{sk}_sex")
     filtered = pipeline_filter_analysis_data(
         pre,
         district=None if district == "All districts" else district,
@@ -333,7 +394,11 @@ def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
 
 def has_data(frame: pd.DataFrame) -> bool:
     if frame.empty:
-        st.warning("No records match this combination of filters. Try widening the analysis lens.")
+        st.warning(
+            "No records match the filters you chose.\n\n"
+            "Widen one filter at a time: set **Province** back to *All provinces*, "
+            "then adjust **District**, **Setting** and **Respondent sex** until records appear."
+        )
         return False
     return True
 
@@ -390,7 +455,7 @@ def weighted_distribution(frame: pd.DataFrame, category: str) -> pd.Series:
 def data_footer(frame: pd.DataFrame, label: str = "Filtered view") -> None:
     source_name = SOURCE_SOURCE_IDs.get(active_source(), "unknown")
     st.markdown(
-        f'<div class="footer-note"><strong>{label}:</strong> {len(frame):,} records in scope · weighted estimates use <span class="mono">hh_wt</span> · active source: <span class="mono">{source_name}</span>. Figures are descriptive associations, not causal estimates.</div>',
+        f'<div class="footer-note"><strong>{label}:</strong> {len(frame):,} records in this view · estimates are weighted with the survey\'s household weight so larger areas and groups count their fair share · survey data: <strong>{SOURCE_LABELS[active_source()]}</strong> <span class="mono">({source_name})</span>. These figures describe what the data shows; they do not prove that one thing causes another.</div>',
         unsafe_allow_html=True,
     )
 
@@ -600,10 +665,11 @@ def render_overview(df: pd.DataFrame) -> None:
     emergency = weighted_rate(view, view["emergency_fund"])
     pressure = weighted_rate(view, view["income_pressure"])
     m1, m2, m3, m4 = st.columns(4)
-    with m1: metric_card("Active formal access", pct(active), "currently use a bank, digital, MFI, mobile money or SACCO channel", "↗", "green")
-    with m2: metric_card("Mobile money anchor", pct(mobile), "currently use a mobile money operator", "⌁", "green", delay=1)
-    with m3: metric_card("Emergency buffer", pct(emergency), "have set aside rainy-day funds", "◌", "yellow", delay=2)
-    with m4: metric_card("Income pressure", pct(pressure), "income does not cover living costs monthly or often", "!", "rose", delay=3)
+    with m1: metric_card("Active formal access", pct(active), "Use a bank, SACCO or mobile-money service today · shows how far formal finance reaches", "↗", "green")
+    with m2: metric_card("Mobile money", pct(mobile), "Send or receive money by phone · shows today's main digital money route", "⌁", "green", delay=1)
+    with m3: metric_card("Emergency buffer", pct(emergency), "Have money saved for a surprise expense · shows who can absorb a shock without borrowing", "◌", "yellow", delay=2)
+    with m4: metric_card("Income pressure", pct(pressure), "Income does not cover monthly living costs · shows who is under day-to-day strain", "!", "rose", delay=3)
+    st.markdown('<div class="legend-row">Card icons: <strong>↗</strong> access · <strong>⌁</strong> digital money · <strong>◌</strong> financial buffer · <strong>!</strong> watch-out</div>', unsafe_allow_html=True)
 
     overview_tabs = st.tabs(["National signal", "Opportunity map"])
     with overview_tabs[0]:
@@ -619,7 +685,7 @@ def render_overview(df: pd.DataFrame) -> None:
             values = [weighted_rate(view, view[m]) * 100 for m in measures]
             colors = ["#3155d4", "#5274e6", "#8ca4f0", "#c5d1fb", "#e5ae2f", "#de7c3f"]
             fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
-            fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5")
+            fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5", title="Share of respondents", title_font=dict(size=10, color="#66718b"))
             fig.update_yaxes(autorange="reversed")
             st.plotly_chart(chart_theme(fig, 328), width="stretch", config={"displayModeBar": False})
             st.markdown('</div>', unsafe_allow_html=True)
@@ -880,7 +946,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             [(req, "missing — estimation blocked") for req in status.missing],
             columns=["Required input", "Status"],
         )
-        st.dataframe(contract, hide_index=True, use_container_width=True, height=250)
+        st.dataframe(contract, hide_index=True, width="stretch", height=250)
         preview_col, cta_col = st.columns([1, 1.4])
         with preview_col:
             if st.button("How can this be unlocked?", key="open_poverty_modal"):
@@ -1096,11 +1162,11 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     aggregate = aggregate_weighted_measure(view, measure)
     if not aggregate.empty:
         aggregate["estimate"] = aggregate["estimate"].map(lambda x: pct(x, 1))
-        aggregate = aggregate.rename(columns={"province": "Province", "district": "District", "setting": "Setting", "sex": "Respondent", "records": "Records", "weight_sum": "Weight sum", "estimate": label})
+        aggregate = aggregate.rename(columns={"province": "Province", "district": "District", "setting": "Setting", "sex": "Respondent sex", "records": "Records", "weight_sum": "Weight sum", "estimate": label})
     st.dataframe(aggregate, hide_index=True, width="stretch", height=340)
     st.markdown('<div class="callout"><strong>Privacy and publication control.</strong><br>Household-level records and raw CSV export are disabled because no authorization or disclosure/publication approval record was supplied. The table above is an aggregate analytical view only.</div>', unsafe_allow_html=True)
     aggregate_csv = aggregate.to_csv(index=False).encode("utf-8") if not aggregate.empty else b""
-    st.download_button("Download aggregate summary (approval required)", aggregate_csv, file_name="insightrwanda_aggregate_summary.csv", mime="text/csv", type="secondary", disabled=True if profile is None else profile.publication_status != "Approved")
+    st.download_button("Download aggregate summary (approval required)", aggregate_csv, file_name="insightrwanda_aggregate_summary.csv", mime="text/csv", type="secondary", disabled=True if profile is None else profile.publication_status != "Approved", help="Unavailable while the source profile records no authorization and publication approval. Hovering the callout above shows the current gate state in detail.")
     data_footer(view, "Explorer view")
 
 
@@ -1148,7 +1214,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
     )
     left, right = st.columns([1.05, .95])
     with left:
-        st.markdown('<div class="chart-card"><div class="eyebrow">Source profile</div><div class="section-title" style="font-size:1.25rem">Supplied Stata dataset</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chart-card"><div class="eyebrow">Source profile</div><div class="section-title" style="font-size:1.25rem">Survey data · {SOURCE_LABELS[active_source()]}</div>', unsafe_allow_html=True)
         source_rows = [
             ["Source ID", profile.source_id], ["Format", profile.format], ["File size", f"{profile.file_size_mb:.2f} MB"],
             ["Source SHA-256", profile.source_sha256], ["Analysis version", profile.analysis_version],
@@ -1171,7 +1237,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Available source materials", "What was actually found in the workspace")
-    st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded source variable/value labels"]}), hide_index=True, width="stretch")
+    st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded survey variable and value labels"]}), hide_index=True, width="stretch")
     st.markdown('<div class="callout"><strong>Governance boundary.</strong><br>The application distinguishes file existence, metadata inspection, permitted analysis, validation and public publication. The supplied workspace contains no authorization or publication approval record, so the app is suitable for internal analysis and demonstration, not an approved public statistical release.</div>', unsafe_allow_html=True)
 
     section_head("Indicator methodology", "Verified source mapping for the current financial-inclusion slice")
@@ -1380,6 +1446,202 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
         return
 
 
+# -----------------------------------------------------------------------------
+# Ask InsightRwanda — offline, evidence-based assistant UI (Phase C2)
+# Every number is produced by research/assistant.py from the loaded survey
+# records; the UI only presents provenance. No LLM, no network, no secrets.
+# -----------------------------------------------------------------------------
+ASK_SUGGESTIONS: tuple[str, ...] = (
+    "Why is there no official poverty estimate?",
+    "Explain financial inclusion in simple English.",
+    "Where does this percentage come from?",
+    "What does this indicator mean?",
+    "What checks were performed on the data?",
+)
+ASK_PAGE_HINTS: dict[str, str] = {
+    "Overview": "FI-01",
+    "Financial inclusion": "FI-01",
+    "Poverty insights": "EI-01",
+    "Resilience lab": "FI-03",
+}
+ASK_HISTORY_LIMIT = 40
+
+
+def ask_indicator_hint(page: str) -> str:
+    """The indicator most relevant to the current page, for “this indicator” questions."""
+
+    return ASK_PAGE_HINTS.get(page, "")
+
+
+def ask_bullets(text: str) -> str:
+    """Prepare C1 answer text for chat rendering: bullets and readable line breaks."""
+
+    rendered = []
+    for line in str(text).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("·"):
+            rendered.append(f"• {stripped[1:].strip()}")
+        elif stripped:
+            rendered.append(stripped)
+    return "  \n".join(rendered)
+
+
+def _ask_history() -> list[dict[str, object]]:
+    """Conversation messages, kept in session state only (never persisted to disk)."""
+
+    if "ask_messages" not in st.session_state or not isinstance(st.session_state["ask_messages"], list):
+        st.session_state["ask_messages"] = []
+    return st.session_state["ask_messages"]
+
+
+def _ask_signature(source_key: str, lens_note: str, view: pd.DataFrame) -> str:
+    """Human-readable binding between answers and the context they were computed under."""
+
+    return f"{SOURCE_LABELS[source_key]} · {lens_note if lens_note else f'{len(view):,} records'}"
+
+
+def _ask_submit(question: str | None, df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+    """Send handler (runs before the dialog fragment rerenders, so it may mutate state)."""
+
+    question = (question if question is not None else st.session_state.get("ask_input", "") or "").strip()
+    if not question:
+        st.session_state["ask_hint"] = "Please type a question first — every answer needs one."
+        return
+    st.session_state.pop("ask_hint", None)
+    messages = _ask_history()
+    page = st.session_state.get("workspace_nav", "Overview")
+    view = _lens_view(df, page)
+    lens_note = lens_signature(view, page) or ""
+    signature = _ask_signature(active_source(), lens_note, view)
+    previous = st.session_state.get("ask_context_signature")
+    if previous != signature:
+        # Never present numbers from an older source or filter set as current ones:
+        # mark the boundary explicitly instead of silently mixing contexts.
+        if messages and previous:
+            messages.append({"role": "switch", "old": previous, "new": signature})
+        st.session_state["ask_context_signature"] = signature
+    if len(messages) >= ASK_HISTORY_LIMIT:
+        del messages[: len(messages) - (ASK_HISTORY_LIMIT - 2)]
+    messages.append({"role": "user", "content": question})
+    try:
+        answer = answer_question(
+            question,
+            frame=view,
+            profile=profile,
+            checks=checks,
+            source_label=SOURCE_LABELS[active_source()],
+            lens_note=lens_note,
+            page=page,
+            indicator_hint=ask_indicator_hint(page),
+        )
+    except Exception:
+        messages.append({
+            "role": "assistant",
+            "content": "That request could not be completed. Please rephrase it in a few words, "
+                       "or read Methods & sources (Page 09) for the full methodology.",
+            "references": (),
+            "numeric": False,
+        })
+        st.session_state["ask_input"] = ""
+        return
+    messages.append({
+        "role": "assistant",
+        "content": answer.answer,
+        "references": tuple(answer.references),
+        "numeric": bool(answer.numeric_verified),
+    })
+    st.session_state["ask_input"] = ""
+
+
+def _ask_clear() -> None:
+    """Explicit conversation reset from the user."""
+
+    st.session_state["ask_messages"] = []
+    st.session_state.pop("ask_context_signature", None)
+    st.session_state.pop("ask_hint", None)
+    st.session_state["ask_input"] = ""
+
+
+def _ask_render_message(message: dict[str, object]) -> None:
+    role = message.get("role")
+    if role == "switch":
+        old = html.escape(str(message.get("old", "")))
+        new = html.escape(str(message.get("new", "")))
+        st.markdown(
+            f"<div class='ask-switch'>Context changed — answers above belong to "
+            f"“{old}”. Answers below use “{new}”.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    with st.chat_message("user" if role == "user" else "assistant", avatar="🗣" if role == "user" else "◒"):
+        # User text is escaped: it is data to display, never markup or instructions.
+        body = html.escape(str(message.get("content", ""))) if role == "user" else ask_bullets(str(message.get("content", "")))
+        st.markdown(f"<div class='ask-q'>{body}</div>" if role == "user" else body, unsafe_allow_html=role == "user")
+        if role != "user":
+            references = message.get("references") or ()
+            for reference in references:
+                detail = f" — {reference.detail}" if reference.detail else ""
+                st.caption(f"{reference.identifier} · {reference.label}{detail}")
+            if message.get("numeric"):
+                st.markdown("<div class='ask-state'>Figures computed live from the loaded survey "
+                            "records with the survey's household weight at the applied lens.</div>",
+                            unsafe_allow_html=True)
+
+
+@st.dialog("Ask InsightRwanda", width="large")
+def ask_insightrwanda_modal(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+    st.caption(
+        "Offline evidence-based assistant — answers come from this project's verified results and "
+        "approved definitions, not a connected AI service. Evidence is missing or unpublished: the "
+        "assistant says so instead of guessing."
+    )
+    messages = _ask_history()
+    if not messages:
+        st.markdown(
+            "<div class='ask-intro'>Ask questions about the research, indicators, survey findings and "
+            "methodology in simple English. Numbers come straight from the loaded records; source "
+            "references appear under every answer.</div>",
+            unsafe_allow_html=True,
+        )
+
+    for message in messages:
+        _ask_render_message(message)
+
+    hint = st.session_state.get("ask_hint")
+    if hint:
+        st.caption(f"ℹ️ {hint}")
+    st.session_state.pop("ask_hint", None)
+
+    st.pills(
+        "Suggested questions",
+        list(ASK_SUGGESTIONS),
+        selection_mode="single",
+        default=[],
+        key="ask_suggestions",
+        help="Tap a suggestion to ask it instantly.",
+        on_change=_ask_suggestion_change,
+        args=(df, profile, checks),
+        wrap=True,
+    )
+
+    st.text_input("Your question", key="ask_input", placeholder="e.g. What does FI-02 mean in simple English?")
+    row = st.columns([1, 1, 1])
+    with row[0]:
+        st.button("Send question", key="ask_send", type="primary", width="stretch",
+                  on_click=_ask_submit, args=(None, df, profile, checks))
+    with row[2]:
+        st.button("Clear conversation", key="ask_clear", width="stretch", on_click=_ask_clear)
+
+
+def _ask_suggestion_change(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+    """Suggested-question handler: submit the selected suggestion and reset the pills."""
+
+    selected = st.session_state.get("ask_suggestions") or []
+    if selected:
+        _ask_submit(str(selected[0]), df, profile, checks)
+    st.session_state["ask_suggestions"] = []
+
+
 @st.dialog("Brief preview — what the export contains", width="large")
 def brief_preview_modal(brief, names: dict[str, str]) -> None:
     st.markdown(f"<div class='eyebrow'>{brief.eyebrow} · {brief.lens_note}</div>", unsafe_allow_html=True)
@@ -1485,10 +1747,15 @@ def main() -> None:
     try:
         df, profile, checks = load_analysis_workload()
     except Exception as exc:
-        st.error(f"The active source could not be loaded: {exc}")
+        st.error(
+            "InsightRwanda could not open its survey data, so the dashboard has nothing to show. "
+            "Check that the survey files inside the project's data folder are present and readable, "
+            "then restart the app.\n\n"
+            f"Technical detail: {exc}"
+        )
         st.stop()
 
-    app_header()
+    app_header(df, profile, checks)
     page = nav(df)
     if page == "Overview":
         render_overview(df)
