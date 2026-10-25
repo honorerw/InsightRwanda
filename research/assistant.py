@@ -367,6 +367,222 @@ def _poverty_blockers(profile: SourceProfile | None, source_label: str) -> tuple
     return "\n".join(parts), references
 
 
+def _indicator_catalog_answer(
+    frame: pd.DataFrame | None,
+    profile: SourceProfile | None,
+    source_label: str,
+) -> tuple[str, tuple[EvidenceReference, ...]]:
+    """List the approved indicators and their definitions — no figures invented."""
+
+    parts = [
+        "The dashboard reports six financial-inclusion indicators, each defined in the "
+        "project's indicator catalogue and computed only from the loaded survey records:",
+    ]
+    for definition in INDICATORS.values():
+        parts.append(f"  · {definition.indicator_id} · {definition.title}: {definition.definition}")
+    parts.append(
+        "Three income-context statistics are reported alongside them: "
+        + "; ".join(f"{definition.indicator_id} · {definition.title}" for definition in CONTEXT_ESTIMATES.values())
+        + ". They are financial-context descriptions, not a poverty headcount."
+    )
+    if frame is not None:
+        withheld: list[str] = []
+        for indicator_id in INDICATORS:
+            try:
+                calculate_indicator(frame, indicator_id)
+            except (KeyError, ValueError):
+                withheld.append(indicator_id)
+        for estimate_id in CONTEXT_ESTIMATES:
+            try:
+                calculate_context_estimate(frame, estimate_id)
+            except (KeyError, ValueError):
+                withheld.append(estimate_id)
+        if withheld:
+            parts.append(
+                "Not reproducible on the active source (no label-verified counterpart): "
+                + ", ".join(withheld)
+                + " — withheld rather than approximated."
+            )
+        else:
+            parts.append("All nine are reproducible on the active source.")
+    parts.append(
+        "Every figure is a weighted share using the survey's household weight; its numerator "
+        "and denominator accompany the answer, and no value is borrowed from outside the "
+        "supplied files."
+    )
+    references = [
+        EvidenceReference("Indicator catalogue", "Approved FI and EI definitions",
+                          "6 FI indicators · 3 income-context statistics"),
+        _page_reference("Financial inclusion"),
+        _page_reference("Poverty insights"),
+    ]
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None:
+        references.append(dataset)
+    return "\n".join(parts), tuple(references)
+
+
+def _indicator_methods_answer(
+    frame: pd.DataFrame | None,
+    profile: SourceProfile | None,
+    source_label: str,
+) -> tuple[str, tuple[EvidenceReference, ...]]:
+    """Explain the shared calculation method using only the documented definitions."""
+
+    parts = [
+        "The reported indicators are not copied from a published table and are not produced "
+        "by a model: each one is computed in the app from the loaded survey records.",
+        "Method for every share: take the indicator's yes/no condition, keep only records whose "
+        "response is valid under that indicator's documented rule, then compute a weighted mean "
+        "using the survey's household weight (hh_wt). Numerator and denominator counts are "
+        "reported with the estimate. Invalid codes and missing values are excluded — never "
+        "imputed or treated as “No”.",
+        "Per-indicator method, exactly as written in the project's indicator catalogue:",
+    ]
+    for definition in INDICATORS.values():
+        parts.append(f"  · {definition.indicator_id}: {definition.method}")
+    for definition in CONTEXT_ESTIMATES.values():
+        parts.append(
+            f"  · {definition.indicator_id}: {definition.method} "
+            "This is income context, not a poverty headcount."
+        )
+    parts.append(
+        "Survey-design standard errors are not produced: no PSU/strata/variance documentation "
+        "was supplied, so no interval is presented as a design-based confidence interval."
+    )
+    references = [
+        EvidenceReference("Indicator catalogue", "Approved calculation methods",
+                          "Weighted shares from the loaded records"),
+        _page_reference("Financial inclusion"),
+        _page_reference("Poverty insights"),
+    ]
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None:
+        references.append(dataset)
+    if frame is None:
+        parts.append("No active source is loaded in this conversation, so no figure is quoted here.")
+    return "\n".join(parts), tuple(references)
+
+
+def _quality_limitations_answer(
+    checks: Sequence[QualityCheck] | None,
+    profile: SourceProfile | None,
+    source_label: str,
+) -> tuple[str, tuple[EvidenceReference, ...]]:
+    """State exactly what the executed checks do and do not establish."""
+
+    if not checks:
+        return (
+            "No quality checks are loaded in this conversation, so I cannot describe their "
+            "limitations without inventing them. Open Data quality (Page 07) with an active "
+            "source and ask again."
+        ), (_page_reference("Data quality"),)
+    summary = quality_summary(list(checks))
+    counts = ", ".join(f"{summary.get(grade, 0)} {grade}" for grade in ("PASS", "WARN", "FAIL", "INFO"))
+    parts = [
+        f"{len(checks)} quality checks ran on the loaded records ({counts}).",
+        "They verify structure and coding integrity: required columns, record counts, key "
+        "behaviour, survey weights, geographic codes and value ranges. They do not certify "
+        "representativeness, fieldwork quality, non-response bias or official statistical "
+        "publication.",
+        "Missing or invalid responses are measured and excluded; they are never imputed or "
+        "silently recoded.",
+    ]
+    problems = [check for check in checks if check.status in {"WARN", "FAIL"}]
+    if problems:
+        listed = "; ".join(
+            f"{check.check_id} ({check.status}): {check.finding.rstrip('.')}" for check in problems[:4]
+        )
+        parts.append(f"Checks raising a warning or failure on this view: {listed}.")
+    else:
+        parts.append(
+            "No check raised a warning or failure on this view — which is still not a "
+            "representativeness or publication certificate. Informational checks (for example "
+            "measured missingness) carry no verdict."
+        )
+    parts.append(
+        "Cross-cutting limitation: no PSU/strata/variance documentation was supplied, so no "
+        "figure carries a survey-design standard error or a design-based confidence interval."
+    )
+    references = [
+        EvidenceReference("Data quality checks", f"{len(checks)} executed checks", counts),
+        _page_reference("Data quality"),
+    ]
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None:
+        references.append(dataset)
+    return "\n".join(parts), tuple(references)
+
+
+def _verification_answer(
+    frame: pd.DataFrame | None,
+    profile: SourceProfile | None,
+    checks: Sequence[QualityCheck] | None,
+    source_label: str,
+) -> tuple[str, tuple[EvidenceReference, ...]]:
+    """Separate what is verified in code from what still needs a data steward."""
+
+    parts = [
+        "Verification status, stated plainly — verified evidence first, open items second.",
+        "Verified in code: the six financial-inclusion definitions are matched to embedded "
+        "Stata variable labels, apply their documented valid-response rules, and report the "
+        "numerator and denominator behind every share. These are project-calculated "
+        "descriptive statistics, not official published rates.",
+        "Requires further verification before any of it can be treated as an official finding:",
+        "  · Survey-design uncertainty — no PSU/strata/variance documentation was supplied, so "
+        "no standard error is claimed; the interval on the Poverty page comes from a weighted "
+        "bootstrap over the loaded records, not a design-based calculation.",
+        "  · Official poverty estimate — all six contract inputs are missing (documented "
+        "poverty line, poverty concept, verified welfare aggregate, variance documentation, "
+        "authorization record and publication approval), so no poverty rate is produced.",
+    ]
+    if profile is not None:
+        parts.append(
+            f"  · Authorization and publication — {profile.authorization_status}; "
+            f"{profile.publication_status}"
+        )
+    if checks:
+        non_pass = [check for check in checks if check.status != "PASS"]
+        if non_pass:
+            listed = "; ".join(f"{check.check_id} ({check.status})" for check in non_pass[:4])
+            parts.append(f"  · Data-quality checks needing attention — {listed}.")
+        else:
+            parts.append("  · Data-quality checks — none failed on this view; scope limits still apply.")
+    else:
+        parts.append("  · Data-quality checks — none loaded, so no verification of structure is available here.")
+    if frame is not None:
+        withheld: list[str] = []
+        for indicator_id in INDICATORS:
+            try:
+                calculate_indicator(frame, indicator_id)
+            except (KeyError, ValueError):
+                withheld.append(indicator_id)
+        for estimate_id in CONTEXT_ESTIMATES:
+            try:
+                calculate_context_estimate(frame, estimate_id)
+            except (KeyError, ValueError):
+                withheld.append(estimate_id)
+        if withheld:
+            parts.append(
+                "  · Source coverage — not reproducible here without a label-verified "
+                "counterpart: " + ", ".join(withheld) + " (withheld, not approximated)."
+            )
+    parts.append(
+        "No answer from this assistant is an official NISR conclusion; treat everything here "
+        "as project evidence awaiting the approvals above."
+    )
+    references = [
+        EvidenceReference("Official-poverty contract", "official_poverty_status()", "Six required inputs; none supplied"),
+        EvidenceReference("Data quality checks", "Structure and coding verification", source_label or "Active source"),
+        _page_reference("Data quality"),
+        _page_reference("Methods & sources"),
+    ]
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None and all(dataset.identifier != ref.identifier for ref in references):
+        references.append(dataset)
+    return "\n".join(parts), tuple(references)
+
+
 def _checks_answer(
     checks: Sequence[QualityCheck] | None,
     profile: SourceProfile | None,
@@ -607,6 +823,23 @@ def _classify(text: str) -> str:
         return "injection"
     if any(re.search(pattern, low) for pattern in _PRIVACY_PATTERNS):
         return "privacy"
+    if re.search(
+        r"quality.{0,40}(limitation|caveat|weakness|problem|issue)|"
+        r"(limitation|caveat).{0,30}quality",
+        low,
+    ):
+        return "quality_limitations"
+    if re.search(
+        r"(require|required|need|needs|pending).{0,30}(further |more )?(verification|validation|confirm)|"
+        r"(unverified|not (yet )?verified|without verification)|which findings|"
+        r"what (still )?needs? (to be )?(verif|check|confirm)",
+        low,
+    ):
+        return "verification_status"
+    if "indicators" in low and re.search(
+        r"\b(list|available|all|which|what are|explain|describe|show)\b", low
+    ):
+        return "indicator_catalog"
     poverty_words = ("why", "unavailable", "missing", "blocker", "gated", "not available", "no official")
     if "poverty" in low and any(word in low for word in poverty_words) and "explain" not in low:
         return "poverty_blockers"
@@ -684,6 +917,18 @@ def answer_question(
         text, references = _poverty_blockers(profile, source_label)
         return AssistantAnswer(kind, text, references)
 
+    if kind == "quality_limitations":
+        text, references = _quality_limitations_answer(checks, profile, source_label)
+        return AssistantAnswer(kind, text, references)
+
+    if kind == "verification_status":
+        text, references = _verification_answer(frame, profile, checks, source_label)
+        return AssistantAnswer(kind, text, references, applied_lens=lens_note)
+
+    if kind == "indicator_catalog":
+        text, references = _indicator_catalog_answer(frame, profile, source_label)
+        return AssistantAnswer(kind, text, references, applied_lens=lens_note)
+
     if kind == "checks":
         text, references = _checks_answer(checks, profile, source_label)
         return AssistantAnswer(kind, text, references)
@@ -717,7 +962,10 @@ def answer_question(
         )
 
     if kind == "estimate_provenance":
-        return _fallback_answer()
+        # No single indicator is named: explain the shared method honestly rather
+        # than pretending to trace one specific figure.
+        text, references = _indicator_methods_answer(frame, profile, source_label)
+        return AssistantAnswer("indicator_methods", text, references, applied_lens=lens_note)
 
     if kind == "limitations":
         return _fallback_answer()

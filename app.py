@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -48,8 +49,12 @@ from research.briefs import (
 )
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.quality import QualityCheck, quality_summary, run_quality_checks
-from research.assistant import AssistantAnswer, answer_question
-from research.assistant_llm import get_configured_provider, refine_answer
+from research.assistant import AssistantAnswer, MAX_QUESTION_LENGTH, answer_question
+from research.assistant_llm import (
+    GEMINI_DEFAULT_MODEL,
+    get_configured_provider,
+    refine_answer_with_status,
+)
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -113,7 +118,7 @@ footer { display: none !important; }
 [data-testid="stToolbar"] [data-testid="stStatusWidget"],
 #MainMenu { display: none !important; }
 [data-testid="stAppViewContainer"] { background: var(--paper); }
-.block-container { max-width: 1480px; padding: 1.35rem 3.4rem 4.5rem; }
+.block-container { max-width: 1480px; padding: 1.35rem 3.4rem 6.4rem; }
 .main .block-container { animation: rise-in .35s ease-out both; }
 @keyframes rise-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 /* Staggered entrances: cards cascade in while the whole page rises */
@@ -220,15 +225,65 @@ button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--
 
 .footer-note { color:#5f6866; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
 button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
-/* Ask InsightRwanda — header entry pill + conversation surfaces */
-.st-key-ask_zone { margin: -.9rem 0 .55rem; display: flex; justify-content: flex-end; }
-.st-key-ask_zone button { border-radius: 999px; font-weight: 600; font-size: .78rem; padding: .38rem 1rem; }
-.ask-intro { font-size: .8rem; color: var(--muted); margin: 0 0 .6rem; }
+/* InsightRwanda AI Assistant — floating launcher + in-screen panel.
+   Fixed positioning keeps it out of page flow, so charts, tables, the sidebar
+   and the Streamlit toolbar are never pushed or hidden. */
+.st-key-ask_launcher { position: fixed; right: 1.4rem; bottom: 1.35rem; z-index: 1000; width: auto; }
+.st-key-ask_launcher button {
+  position: relative; border-radius: 999px; border: 1px solid #2443b8;
+  background: #3155d4; color: #fff; font-weight: 700; font-size: .84rem;
+  padding: .68rem 1.15rem; box-shadow: 0 12px 28px rgba(23,37,84,.26);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.st-key-ask_launcher button:hover { background: #2443b8; color: #fff; transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(23,37,84,.3); }
+.st-key-ask_launcher button::after { content: ''; position: absolute; top: 7px; right: 9px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--orange);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+.st-key-ask_launcher button:focus-visible { outline: 3px solid var(--orange) !important; outline-offset: 3px; }
+
+.st-key-ask_panel {
+  position: fixed; right: 1.4rem; bottom: 5.35rem; z-index: 1001;
+  width: min(398px, calc(100vw - 2.8rem));
+  max-height: min(80vh, 660px); overflow-y: auto; overflow-x: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(23,37,84,.24); padding: .85rem .9rem 1rem;
+  animation: ask-in .18s ease-out both;
+}
+@keyframes ask-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .st-key-ask_panel { animation: none; } }
+/* Notifications (top-right, transient) always draw above the assistant panel. */
+[data-testid="stToastContainer"] { z-index: 1200 !important; }
+.st-key-ask_panel > div { max-width: 100%; }
+.st-key-ask_panel [data-testid="stVerticalBlockBorderWrapper"] { row-gap: .5rem; }
+.ask-head { display: flex; gap: .55rem; align-items: flex-start; padding-right: 4.9rem; }
+.ask-mark { width: 32px; height: 32px; flex: none; border-radius: 10px;
+  background: linear-gradient(135deg, #3155d4, #2443b8); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
+  box-shadow: 0 4px 10px rgba(49,85,212,.3); }
+.ask-title { font-weight: 800; font-size: .92rem; color: var(--ink); line-height: 1.3; }
+.ask-subtitle { font-size: .72rem; color: var(--muted); line-height: 1.4; margin-top: .1rem; }
+.st-key-ask_close { position: absolute; top: .55rem; right: .6rem; z-index: 2; width: auto; }
+.st-key-ask_close button { color: var(--muted); font-size: .7rem; font-weight: 600;
+  padding: .26rem .42rem; border: 1px solid var(--line); border-radius: 8px;
+  background: rgba(255,255,255,.92); }
+.st-key-ask_close button:hover { color: var(--ink); background: var(--paper); }
+.ask-badge { font-size: .65rem; line-height: 1.45; color: #3f4a66; background: #eef3ff;
+  border: 1px solid #d5defb; border-radius: 9px; padding: .4rem .55rem; }
+.st-key-ask_history_zone { border: 1px solid var(--line); border-radius: 12px; background: #fbfcff;
+  padding: .55rem .6rem; overflow-anchor: none; }
+.st-key-ask_history_zone button[kind="secondary"] { font-size: .72rem; font-weight: 600;
+  justify-content: flex-start; text-align: left; line-height: 1.35; padding: .42rem .55rem; border-radius: 9px; }
+.ask-empty { margin: .15rem 0 .5rem; }
+.ask-empty-title { font-weight: 700; font-size: .82rem; color: var(--ink); }
+.ask-empty-copy { font-size: .72rem; color: var(--muted); line-height: 1.45; margin-top: .2rem; }
+.ask-intro { font-size: .74rem; color: var(--muted); margin: 0 0 .6rem; }
 .ask-q { background: var(--paper); border: 1px solid var(--line); border-radius: 10px 10px 3px 10px;
   padding: .55rem .7rem; font-size: .84rem; max-width: 92%; word-wrap: break-word; }
 .ask-switch { background: #faf6ea; border: 1px dashed #cbbf8f; border-radius: 8px; padding: .45rem .65rem;
   font-size: .75rem; color: #63593a; }
-.ask-state { font-size: .72rem; color: var(--muted); }
+.ask-state { font-size: .7rem; color: var(--muted); }
+.ask-foot { font-size: .64rem; color: var(--muted); line-height: 1.4; padding-top: .15rem; }
 
 /* Accessibility: a clearly visible keyboard-focus indicator in both color zones.
    The blue works on the light surface; the dark sidebar rail needs the mint accent instead. */
@@ -237,11 +292,14 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="rad
 summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green) !important; outline-offset: 2px; }
 [data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible { outline-color: #9ce0c6 !important; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
-@media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
+@media (max-width: 900px) { .block-container { padding: .8rem 1rem 6rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; }
+  .st-key-ask_launcher { right: 1.1rem; bottom: 1.1rem; }
+  .st-key-ask_panel { right: 1.1rem; bottom: 5rem; }
+}
 /* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
 @media (max-width: 640px) {
   /* The top strip hosts Streamlit's sidebar expand control; keep page content clear of it */
-  .block-container { padding: 4.55rem .85rem 2.6rem; }
+  .block-container { padding: 4.55rem .85rem 6rem; }
   .app-header { flex-wrap: wrap; align-items:flex-start; gap:.3rem; }
   .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
   .brand-name { font-size:1.02rem; }
@@ -250,6 +308,13 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   .metric-value { font-size:1.5rem; }
   .metric-foot { font-size:.67rem; }
   .filter-shell { padding:.7rem .7rem .1rem; }
+  .st-key-ask_launcher { right: .9rem; bottom: .9rem; }
+  .st-key-ask_launcher button { font-size: .8rem; padding: .62rem .95rem; }
+  .st-key-ask_panel { left: .6rem; right: .6rem; bottom: 4.85rem; width: auto;
+    max-height: calc(100vh - 11.2rem); max-height: calc(100dvh - 11.2rem); border-radius: 16px; }
+  .ask-head { padding-right: 4.4rem; }
+  .ask-title { font-size: .88rem; }
+  .ask-subtitle { font-size: .7rem; }
   .insight-card { min-height:auto; }
   .chart-card { padding:.9rem .9rem .7rem; }
 }
@@ -292,11 +357,8 @@ def app_header(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityChe
         """,
         unsafe_allow_html=True,
     )
-    # Ask InsightRwanda — header entry point for the offline evidence assistant.
-    # Main content placement keeps the sidebar's exact ten-button contract intact.
-    with st.container(key="ask_zone"):
-        if st.button("Ask InsightRwanda", key="ask_launch", icon=":material/forum:", help="Ask questions about the survey evidence in simple English"):
-            ask_insightrwanda_modal(df, profile, checks)
+    # The AI Assistant lives in a fixed launcher rendered at the end of main(),
+    # so it never consumes page space and opens without leaving this screen.
 
 
 def nav(df: pd.DataFrame) -> str:
@@ -1453,11 +1515,32 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
 # records; the UI only presents provenance. No LLM, no network, no secrets.
 # -----------------------------------------------------------------------------
 ASK_SUGGESTIONS: tuple[str, ...] = (
-    "Why is there no official poverty estimate?",
-    "Explain financial inclusion in simple English.",
-    "Where does this percentage come from?",
-    "What does this indicator mean?",
-    "What checks were performed on the data?",
+    "What does financial inclusion mean?",
+    "Explain the available financial inclusion indicators.",
+    "What are the main data quality limitations?",
+    "How are the reported indicators calculated?",
+    "Which findings require further verification?",
+)
+ASK_AI_STATUS: dict[str, str] = {
+    "disabled": "Gemini is not configured on this deployment, so this answer uses the verified "
+                "project rules only. An administrator can add GEMINI_API_KEY to enable AI wording.",
+    "blocked": "This answer was kept entirely local because its evidence is not approved for "
+               "external sharing. No text from it was sent to an AI provider.",
+    "rate_limited": "Gemini's free-tier quota or rate limit was reached. The verified project "
+                    "answer is shown unchanged; please try again later.",
+    "invalid_key": "Gemini rejected the configured API key. The verified project answer is shown "
+                   "unchanged; an administrator should check the deployment secret.",
+    "timeout": "Gemini did not respond in time. The verified project answer is shown unchanged; "
+               "no retry was attempted.",
+    "invalid_response": "Gemini returned no usable text. The verified project answer is shown "
+                        "unchanged.",
+    "unavailable": "The Gemini wording layer is temporarily unavailable. The verified project "
+                   "answer is shown unchanged.",
+    "guard_rejected": "Gemini's wording changed a protected figure or added a new one, so it was "
+                      "discarded. The verified project answer is shown unchanged.",
+}
+ASK_SUMMARY: str = (
+    "Ask questions about Rwanda's financial inclusion and poverty insights."
 )
 ASK_PAGE_HINTS: dict[str, str] = {
     "Overview": "FI-01",
@@ -1501,14 +1584,77 @@ def _ask_signature(source_key: str, lens_note: str, view: pd.DataFrame) -> str:
     return f"{SOURCE_LABELS[source_key]} · {lens_note if lens_note else f'{len(view):,} records'}"
 
 
-def _ask_submit(question: str | None, df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
-    """Send handler (runs before the dialog fragment rerenders, so it may mutate state)."""
+def _ask_queue(question: str | None = None) -> None:
+    """Queue a question from a widget callback.
 
-    question = (question if question is not None else st.session_state.get("ask_input", "") or "").strip()
+    Work happens on the next run of the assistant fragment, so the panel can
+    show its loading indicator while the answer is assembled. Callbacks stay
+    quick and never touch the survey records themselves. A second click while
+    a question is already pending is ignored, so one send cannot become two
+    provider requests.
+    """
+
+    if st.session_state.get("ask_pending"):
+        return
+    raw = question if question is not None else st.session_state.get("ask_input", "")
+    question = str(raw or "").strip()
     if not question:
         st.session_state["ask_hint"] = "Please type a question first — every answer needs one."
         return
+    if len(question) > MAX_QUESTION_LENGTH:
+        st.session_state["ask_hint"] = (
+            f"Please keep the question under {MAX_QUESTION_LENGTH} characters so it can be "
+            "read reliably."
+        )
+        return
     st.session_state.pop("ask_hint", None)
+    st.session_state["ask_pending"] = question
+
+
+def _ask_provider():
+    """Return the optional Gemini provider, reading the key without ever exposing it.
+
+    Streamlit secrets are the deployment path; GEMINI_API_KEY in the environment
+    is the local fallback. Missing or malformed configuration means no provider,
+    never a silent switch to another service.
+    """
+
+    key = ""
+    try:
+        key = str(st.secrets.get("GEMINI_API_KEY", "") or "").strip()
+    except Exception:
+        key = ""
+    if not key:
+        key = str(os.environ.get("GEMINI_API_KEY", "") or "").strip()
+    if not key:
+        return None
+    try:
+        return get_configured_provider(
+            key,
+            environ={"GEMINI_MODEL": str(os.environ.get("GEMINI_MODEL", "") or "")},
+        )
+    except Exception:
+        return None
+
+
+def _ask_toggle_panel(open_panel: bool | None = None) -> None:
+    """Show, hide or toggle the in-screen panel; the page itself never moves."""
+
+    if open_panel is None:
+        st.session_state["ask_open"] = not bool(st.session_state.get("ask_open", False))
+    else:
+        st.session_state["ask_open"] = bool(open_panel)
+    st.session_state.pop("ask_pending", None)  # never leave a stale question queued
+
+
+def _ask_process(
+    question: str,
+    df: pd.DataFrame,
+    profile: SourceProfile,
+    checks: list[QualityCheck],
+) -> None:
+    """Answer one question and append it to the session-only conversation."""
+
     messages = _ask_history()
     page = st.session_state.get("workspace_nav", "Overview")
     view = _lens_view(df, page)
@@ -1545,25 +1691,31 @@ def _ask_submit(question: str | None, df: pd.DataFrame, profile: SourceProfile, 
         })
         st.session_state["ask_input"] = ""
         return
-    # Phase C3 — optional AI explanation layer. Disabled with no approved
-    # provider: get_configured_provider() is None and refine_answer returns
-    # the deterministic answer unchanged, with its original references.
-    answer = refine_answer(question, answer, get_configured_provider())
+    # Optional Gemini wording layer. It stays off unless the deployment sets
+    # GEMINI_API_KEY. It receives only an already-grounded answer whose figures
+    # have been replaced with local tokens, and any provider failure or changed
+    # figure returns the deterministic text unchanged.
+    provider = _ask_provider()
+    refinement = refine_answer_with_status(question, answer, provider)
     messages.append({
         "role": "assistant",
-        "content": answer.answer,
-        "references": tuple(answer.references),
-        "numeric": bool(answer.numeric_verified),
+        "content": refinement.answer.answer,
+        "references": tuple(refinement.answer.references),
+        "numeric": bool(refinement.answer.numeric_verified),
+        "ai_status": refinement.status,
+        "ai_model": getattr(provider, "model", "") if provider is not None else "",
+        "redacted_figures": refinement.redacted_figures,
     })
     st.session_state["ask_input"] = ""
 
 
 def _ask_clear() -> None:
-    """Explicit conversation reset from the user."""
+    """Start a new conversation; nothing was ever persisted to disk."""
 
     st.session_state["ask_messages"] = []
     st.session_state.pop("ask_context_signature", None)
     st.session_state.pop("ask_hint", None)
+    st.session_state.pop("ask_pending", None)
     st.session_state["ask_input"] = ""
 
 
@@ -1578,73 +1730,164 @@ def _ask_render_message(message: dict[str, object]) -> None:
             unsafe_allow_html=True,
         )
         return
-    with st.chat_message("user" if role == "user" else "assistant", avatar="🗣" if role == "user" else "◒"):
+    with st.chat_message("user" if role == "user" else "assistant",
+                         avatar=":material/person:" if role == "user" else ":material/forum:"):
         # User text is escaped: it is data to display, never markup or instructions.
         body = html.escape(str(message.get("content", ""))) if role == "user" else ask_bullets(str(message.get("content", "")))
         st.markdown(f"<div class='ask-q'>{body}</div>" if role == "user" else body, unsafe_allow_html=role == "user")
         if role != "user":
             references = message.get("references") or ()
-            for reference in references:
-                detail = f" — {reference.detail}" if reference.detail else ""
-                st.caption(f"{reference.identifier} · {reference.label}{detail}")
+            if references:
+                # One compact provenance line instead of a citation wall: the
+                # scroll area should end on the answer, not on five captions.
+                parts = []
+                for reference in references:
+                    label = str(reference.label)
+                    if len(label) > 70:
+                        label = label[:67].rstrip() + "…"
+                    parts.append(f"{reference.identifier} · {label}")
+                st.caption("Sources: " + " — ".join(parts))
+            status = str(message.get("ai_status") or "disabled")
+            if status == "reworded":
+                redacted = int(message.get("redacted_figures") or 0)
+                st.markdown(
+                    "<div class='ask-state'>AI-generated wording from verified project evidence "
+                    f"({redacted} figure placeholder(s) restored locally; no survey figure was "
+                    "sent). Check important details against the sources.</div>",
+                    unsafe_allow_html=True,
+                )
+            elif status in ASK_AI_STATUS:
+                st.markdown(
+                    f"<div class='ask-state'>{html.escape(ASK_AI_STATUS[status])}</div>",
+                    unsafe_allow_html=True,
+                )
             if message.get("numeric"):
                 st.markdown("<div class='ask-state'>Figures computed live from the loaded survey "
                             "records with the survey's household weight at the applied lens.</div>",
                             unsafe_allow_html=True)
 
 
-@st.dialog("Ask InsightRwanda", width="large")
-def ask_insightrwanda_modal(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
-    st.caption(
-        "Offline evidence-based assistant — answers come from this project's verified results and "
-        "approved definitions, not a connected AI service. Evidence is missing or unpublished: the "
-        "assistant says so instead of guessing."
+@st.fragment
+def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+    """Floating launcher and in-screen AI Assistant panel.
+
+    Rendered once per page at the end of ``main()``. Scoped CSS fixes the
+    launcher to the bottom-right corner; the panel opens above it on the same
+    screen, so the current page and its charts stay in place. Both controls
+    run inside a fragment: opening, closing and chatting rerender only this
+    widget, never the whole application. Conversation state is session-only.
+    """
+
+    with st.container(key="ask_launcher"):
+        st.button(
+            "AI Assistant",
+            key="ask_launch",
+            icon=":material/forum:",
+            help="Open the InsightRwanda AI Assistant. Answers use verified project "
+                 "evidence; an optional Gemini wording layer runs only when configured.",
+            on_click=_ask_toggle_panel,
+        )
+    if not st.session_state.get("ask_open", False):
+        return
+
+    provider = _ask_provider()
+    badge = (
+        f"Verified project rules · Gemini not configured · answers stay local"
+        if provider is None else
+        f"Gemini {getattr(provider, 'model', GEMINI_DEFAULT_MODEL)} · figures are replaced "
+        "with local tokens before sending · AI wording may need verification"
     )
-    messages = _ask_history()
-    if not messages:
+
+    with st.container(key="ask_panel"):
         st.markdown(
-            "<div class='ask-intro'>Ask questions about the research, indicators, survey findings and "
-            "methodology in simple English. Numbers come straight from the loaded records; source "
-            "references appear under every answer.</div>",
+            "<div class='ask-head'><span class='ask-mark' aria-hidden='true'>◒</span>"
+            "<div><div class='ask-title'>InsightRwanda AI Assistant</div>"
+            f"<div class='ask-subtitle'>{ASK_SUMMARY}</div></div></div>",
             unsafe_allow_html=True,
         )
+        # Positioned at the panel's top-right by scoped CSS: it stays a real,
+        # focusable button on every viewport instead of a clipped column label.
+        st.button(
+            "Close",
+            key="ask_close",
+            icon=":material/close:",
+            type="tertiary",
+            help="Close the assistant; the conversation stays in this session.",
+            on_click=_ask_toggle_panel,
+            args=(False,),
+        )
+        st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
+        if provider is None:
+            st.caption(
+                "Gemini is not configured here. Answers still use the verified project rules. "
+                "An administrator can set GEMINI_API_KEY in Streamlit secrets or the environment."
+            )
 
-    for message in messages:
-        _ask_render_message(message)
+        pending = st.session_state.pop("ask_pending", None)
+        if pending is not None:
+            with st.spinner("Checking verified project evidence and preparing the answer…"):
+                _ask_process(str(pending), df, profile, checks)
 
-    hint = st.session_state.get("ask_hint")
-    if hint:
-        st.caption(f"ℹ️ {hint}")
-    st.session_state.pop("ask_hint", None)
+        messages = _ask_history()
+        with st.container(key="ask_history_zone", height=320):
+            if messages:
+                for message in messages:
+                    _ask_render_message(message)
+            else:
+                st.markdown(
+                    "<div class='ask-empty'><div class='ask-empty-title'>Ask about verified "
+                    "insights</div><div class='ask-empty-copy'>Answers come from this project's "
+                    "approved definitions and loaded survey records — never from outside "
+                    "knowledge. Survey figures are replaced with local tokens before any AI "
+                    "wording request. Start with one of these:</div></div>",
+                    unsafe_allow_html=True,
+                )
+                for index, suggestion in enumerate(ASK_SUGGESTIONS):
+                    st.button(
+                        suggestion,
+                        key=f"ask_example_{index}",
+                        width="stretch",
+                        on_click=_ask_queue,
+                        args=(suggestion,),
+                    )
 
-    st.pills(
-        "Suggested questions",
-        list(ASK_SUGGESTIONS),
-        selection_mode="single",
-        default=[],
-        key="ask_suggestions",
-        help="Tap a suggestion to ask it instantly.",
-        on_change=_ask_suggestion_change,
-        args=(df, profile, checks),
-        wrap=True,
-    )
+        hint = st.session_state.get("ask_hint")
+        if hint:
+            st.caption(f"ℹ️ {hint}")
+        st.session_state.pop("ask_hint", None)
 
-    st.text_input("Your question", key="ask_input", placeholder="e.g. What does FI-02 mean in simple English?")
-    row = st.columns([1, 1, 1])
-    with row[0]:
-        st.button("Send question", key="ask_send", type="primary", width="stretch",
-                  on_click=_ask_submit, args=(None, df, profile, checks))
-    with row[2]:
-        st.button("Clear conversation", key="ask_clear", width="stretch", on_click=_ask_clear)
-
-
-def _ask_suggestion_change(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
-    """Suggested-question handler: submit the selected suggestion and reset the pills."""
-
-    selected = st.session_state.get("ask_suggestions") or []
-    if selected:
-        _ask_submit(str(selected[0]), df, profile, checks)
-    st.session_state["ask_suggestions"] = []
+        st.text_input(
+            "Your question",
+            key="ask_input",
+            placeholder="Ask a question about the available insights...",
+            max_chars=MAX_QUESTION_LENGTH,
+            label_visibility="collapsed",
+        )
+        controls = st.columns([1.4, 1])
+        with controls[0]:
+            st.button(
+                "Send",
+                key="ask_send",
+                type="primary",
+                width="stretch",
+                help="Send your question to the evidence assistant.",
+                on_click=_ask_queue,
+            )
+        with controls[1]:
+            st.button(
+                "New conversation",
+                key="ask_clear",
+                width="stretch",
+                help="Start a new conversation. Nothing is saved to disk.",
+                on_click=_ask_clear,
+            )
+        st.markdown(
+            "<div class='ask-foot'>Do not enter personal or household-level details. Only your "
+            "question and approved project wording are sent when Gemini is configured; survey "
+            "figures are replaced locally before sending. AI wording may contain errors and is "
+            "not an official NISR conclusion.</div>",
+            unsafe_allow_html=True,
+        )
 
 
 @st.dialog("Brief preview — what the export contains", width="large")
@@ -1786,6 +2029,8 @@ def main() -> None:
     render_brief_export(page, df, profile, checks)
     lens_toast(page, lens_signature(_lens_view(df, page), page))
     kpi_countup()
+    # Floating AI Assistant — same screen, page content stays behind it.
+    ask_assistant_widget(df, profile, checks)
 
 
 if __name__ == "__main__":
