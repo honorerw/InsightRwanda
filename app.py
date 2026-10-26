@@ -125,13 +125,24 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .stApp { background: var(--paper); }
 header[data-testid="stHeader"] { background: transparent !important; }
 footer { display: none !important; }
-/* Streamlit renders its sidebar expand control inside the top toolbar. Hiding the
-   toolbar wrapper would strand users on collapsed sidebars (mobile), so only the
-   deploy button, main menu and status spinner are hidden, never the expand control. */
+/* Streamlit's default sidebar-collapse chevron is removed entirely: the sidebar's
+   own menu button (top of the rail) is the single collapse control. Streamlit's
+   auto-collapse on narrow screens keeps showing its *expand* control, which is
+   restyled below so no one is ever stranded with a closed rail. */
 [data-testid="stToolbar"] [data-testid="stBaseButton-header"],
 [data-testid="stToolbar"] [data-testid="stMainMenuButton"],
 [data-testid="stToolbar"] [data-testid="stStatusWidget"],
+[data-testid="stSidebarCollapseButton"],
 #MainMenu { display: none !important; }
+[data-testid="stExpandSidebarButton"] button,
+[data-testid="stExpandSidebarButton"][kind] { border-radius:10px; }
+[data-testid="stExpandSidebarButton"] {
+  background:#eaf7f0 !important; border:1px solid #bfe6cf !important;
+  box-shadow:0 2px 8px rgba(5,150,105,.12); color:#14532d !important;
+  transition:background .16s ease, border-color .16s ease;
+}
+[data-testid="stExpandSidebarButton"] svg { fill:#059669; }
+[data-testid="stExpandSidebarButton"]:hover { background:#d9f2e5 !important; border-color:#aaddc2 !important; }
 [data-testid="stAppViewContainer"] { background: var(--paper); }
 .block-container { max-width: 1480px; padding: 1.35rem 3.4rem 6.4rem; }
 .main .block-container { animation: rise-in .35s ease-out both; }
@@ -151,10 +162,21 @@ footer { display: none !important; }
 
 /* Sidebar — very light mint rail beside the white workspace, WCAG-AA contrast */
 [data-testid="stSidebar"] { background:#edf5f0; border-right:1px solid #d8e8dd; min-width:276px; }
+/* The built-in sidebar header only hosts the (hidden) default collapse chevron and an
+   empty logo spacer — a blank flex strip. Our own brand row replaces it, so remove it.
+   No media query here: the hide applies at every screen size (desktop, tablet, phone). */
+[data-testid="stSidebarHeader"] { display:none !important; }
+/* Drop Streamlit's reserved sidebar top/bottom gaps for a tight rail everywhere */
+[data-testid="stSidebarUserContent"] { padding-top:0 !important; padding-bottom:0 !important; }
 [data-testid="stSidebar"] > div:first-child { padding:1.15rem .9rem 1.5rem; }
 [data-testid="stSidebar"] * { color:#17213d; }
 [data-testid="stSidebar"] hr { border-color:#d8e8dd; margin:1rem 0; }
 .side-brand { display:flex; align-items:center; gap:.65rem; padding:.25rem .35rem 1rem; border-bottom:1px solid #d8e8dd; margin-bottom:.9rem; }
+/* Custom collapse toggle (the only sidebar collapse control): quiet icon button in the rail */
+[data-testid="stSidebar"] button[title="Collapse or expand the sidebar"] {
+  width:100% !important; justify-content:center !important; border-radius:10px; padding:.5rem .3rem !important; }
+[data-testid="stSidebar"] button[title="Collapse or expand the sidebar"]:hover { background:#e2f0e8; border-color:#cfe0d5; }
+[data-testid="stSidebar"] button[title="Collapse or expand the sidebar"] svg { fill:#059669; }
 .side-mark { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:11px; background:linear-gradient(145deg, #34d399, #059669); color:#fff; font-family:'Roboto', Arial, Verdana, sans-serif; font-weight:700; box-shadow:0 6px 16px rgba(5,150,105,.22); }
 .side-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:.98rem; font-weight:600; letter-spacing:-.01em; color:#17213d; }
 [data-testid="stSidebar"] .side-caption { color:#5b6f66 !important; font-size:.65rem; line-height:1.5; margin:.12rem .15rem .2rem; }
@@ -355,23 +377,44 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="rad
 summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green) !important; outline-offset: 2px; }
 [data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible, [data-testid="stSidebar"] [data-testid="stSelectbox"]:focus-within { outline-color: #059669 !important; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
-@media (max-width: 900px) { .block-container { padding: .8rem 1rem 6rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; }
+@media (max-width: 900px) {
+  .block-container { padding: .8rem 1rem 6rem; }
+  .page-title { font-size:1.95rem; }
+  /* Keep the live status pill at the masthead; drop only the two info chips */
+  .header-chip { display:none; }
+  .app-header { padding:.85rem 1.05rem; }
+  .stRadio label { padding:.42rem .48rem; font-size:.73rem; }
+  .metric-card { min-height:122px; }
+  /* Filter bar flows two selectboxes per row instead of four cramped ones */
+  .filter-shell [data-testid="stColumn"] { flex:1 1 46% !important; width:46% !important; }
   .st-key-ask_launcher { right: 1.1rem; bottom: 1.1rem; }
   .st-key-ask_panel { right: 1.1rem; bottom: 5rem; }
 }
 /* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
 @media (max-width: 640px) {
-  /* The top strip hosts Streamlit's sidebar expand control; keep page content clear of it */
+  /* The top strip hosts Streamlit's auto-collapse *expand* control; keep page content clear of it */
   .block-container { padding: 4.55rem .85rem 6rem; }
   .app-header { flex-wrap: wrap; align-items:flex-start; gap:.65rem; padding:.85rem .95rem; border-radius:15px; }
   .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
   .brand-mark::after { inset:-4px; }
   .brand-name { font-size:1.02rem; }
   .page-title { font-size:1.52rem; }
+  .page-lede { font-size:.86rem; margin:.45rem 0 1rem; }
+  .brand-sub { font-size:.66rem; }
   .metric-card { padding:.9rem .85rem .85rem; min-height:116px; }
   .metric-value { font-size:1.38rem; }
   .metric-foot { font-size:.67rem; }
   .filter-shell { padding:.7rem .7rem .1rem; }
+  /* Every main-area column pair stacks full-width so charts and cards are readable.
+     Sidebar columns are exempted so the rail's brand + toggle row stays on one line. */
+  [data-testid="stAppViewContainer"] [data-testid="stColumn"] { flex:0 0 100% !important; width:100% !important; }
+  [data-testid="stAppViewContainer"] [data-testid="stHorizontalBlock"] { flex-wrap:wrap; row-gap:.65rem; }
+  [data-testid="stSidebar"] [data-testid="stColumn"] { flex:0 0 auto !important; width:auto !important; }
+  .insight-card { min-height:auto; padding:.9rem 1rem; }
+  .insight-text { font-size:.92rem; }
+  .chart-card { padding:.9rem .9rem .7rem; }
+  .callout { font-size:.76rem; padding:.75rem .85rem; }
+  .side-card { font-size:.64rem; }
   .st-key-ask_launcher { right: .9rem; bottom: .9rem; }
   .st-key-ask_launcher button { font-size: .8rem; padding: .62rem .95rem; }
   .st-key-ask_panel { left: .6rem; right: .6rem; bottom: 4.85rem; width: auto;
@@ -379,8 +422,6 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   .ask-head { padding-right: 4.4rem; }
   .ask-title { font-size: .88rem; }
   .ask-subtitle { font-size: .7rem; }
-  .insight-card { min-height:auto; }
-  .chart-card { padding:.9rem .9rem .7rem; }
 }
 </style>
 """,
@@ -457,8 +498,13 @@ COLLAPSED_SIDEBAR_CSS = """
 [data-testid="stSidebar"] .stButton button { justify-content:center !important; padding:.62rem .3rem; }
 [data-testid="stSidebar"] .side-caption, [data-testid="stSidebar"] .side-label, [data-testid="stSidebar"] .side-card,
 [data-testid="stSidebar"] [data-testid="stSelectbox"], .st-key-side_profile { display:none !important; }
-[data-testid="stSidebar"] .side-brand { justify-content:center; gap:0; padding-bottom:.7rem; }
+/* Brand row: mark and the toggle stack vertically and centre in the narrow rail */
+[data-testid="stSidebar"] .side-brand { justify-content:center; gap:0;
+  border-bottom:none; border-top:none; padding-bottom:.35rem; }
 [data-testid="stSidebar"] .side-brand div:nth-child(2) { display:none; }
+[data-testid="stSidebar"] [data-testid="stColumn"] { flex:0 0 100% !important; width:100% !important; }
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] { flex-wrap:wrap; row-gap:0; }
+.st-key-side_actions .stButton button { padding:.62rem .3rem; }
 </style>
 """
 
