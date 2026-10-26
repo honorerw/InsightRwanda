@@ -1,4 +1,4 @@
-"""Tests for research.assistant_llm — the optional Gemini wording layer.
+"""Tests for research.assistant_llm — the optional Groq wording layer.
 
 Everything here uses stub clients/providers. No test reads a real key, touches
 the network, or makes a paid/free-tier request. The suite covers the missing-key
@@ -9,14 +9,15 @@ input limits, privacy filtering and the figure-redaction guard.
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 import pandas as pd
 
 from research.assistant import AssistantAnswer, EvidenceReference, answer_question
 from research.assistant_llm import (
-    GEMINI_DEFAULT_MODEL,
+    GROQ_DEFAULT_MODEL,
     ExplanationPayload,
-    GeminiProvider,
+    GroqProvider,
     ProviderAuthError,
     ProviderError,
     ProviderInvalidResponse,
@@ -144,7 +145,7 @@ class _StubProvider:
         raise AssertionError(self.behaviour)
 
 
-class _FakeInteractions:
+class _FakeCompletions:
     def __init__(self, output: str | None = None, error: Exception | None = None):
         self.output = output
         self.error = error
@@ -154,12 +155,19 @@ class _FakeInteractions:
         self.kwargs = kwargs
         if self.error is not None:
             raise self.error
-        return type("Interaction", (), {"output_text": self.output})()
+        message = type("Message", (), {"content": self.output})()
+        choice = type("Choice", (), {"message": message})()
+        return type("Completion", (), {"choices": [choice]})()
+
+
+class _FakeChat:
+    def __init__(self, output: str | None = None, error: Exception | None = None):
+        self.completions = _FakeCompletions(output, error)
 
 
 class _FakeClient:
     def __init__(self, output: str | None = None, error: Exception | None = None):
-        self.interactions = _FakeInteractions(output, error)
+        self.chat = _FakeChat(output, error)
 
 
 class KeyConfigurationTests(unittest.TestCase):
@@ -170,11 +178,11 @@ class KeyConfigurationTests(unittest.TestCase):
 
     def test_environment_key_is_read_without_exposing_it(self):
         provider = get_configured_provider(
-            environ={"GEMINI_API_KEY": "test-key", "GEMINI_MODEL": "gemini-3.5-flash-lite"},
+            environ={"GROQ_API_KEY": "test-key", "GROQ_MODEL": "openai/gpt-oss-120b"},
             client=_FakeClient(output="text"),
         )
         self.assertIsNotNone(provider)
-        self.assertEqual(provider.model, "gemini-3.5-flash-lite")
+        self.assertEqual(provider.model, "openai/gpt-oss-120b")
         self.assertNotIn("test-key", repr(provider))
         self.assertNotIn("test-key", str(provider))
 
@@ -182,7 +190,7 @@ class KeyConfigurationTests(unittest.TestCase):
         self.assertIsNone(
             get_configured_provider(
                 "test-key",
-                environ={"GEMINI_MODEL": "not-a-gemini-model"},
+                environ={"GROQ_MODEL": "not a model/../../etc"},
                 client=_FakeClient(output="text"),
             )
         )
@@ -191,59 +199,125 @@ class KeyConfigurationTests(unittest.TestCase):
         provider = get_configured_provider(
             "test-key", environ={}, client=_FakeClient(output="text")
         )
-        self.assertEqual(provider.model, GEMINI_DEFAULT_MODEL)
+        self.assertEqual(provider.model, GROQ_DEFAULT_MODEL)
 
 
 class ProviderRequestTests(unittest.TestCase):
     def test_successful_request_carries_only_question_and_redacted_answer(self):
         output = "Reworded text."
         client = _FakeClient(output=output)
-        provider = GeminiProvider(api_key="secret-value", client=client)
+        provider = GroqProvider(api_key="secret-value", client=client)
         redacted, _mapping = redact_figures("Share is 62.5% (3 of 5).")
         payload = build_explanation_payload("What is FI-04?", redacted)
         self.assertEqual(provider.explain(payload), output)
-        request = client.interactions.kwargs
-        self.assertEqual(request["model"], GEMINI_DEFAULT_MODEL)
-        self.assertIn("preserve every placeholder", request["system_instruction"].lower())
-        self.assertEqual(request["generation_config"]["max_output_tokens"], 1200)
-        self.assertEqual(request["generation_config"]["thinking_level"], "low")
+        request = client.chat.completions.kwargs
+        self.assertEqual(request["model"], GROQ_DEFAULT_MODEL)
+        self.assertEqual(request["messages"][0]["role"], "system")
+        self.assertIn("preserve every answer placeholder", request["messages"][0]["content"].lower())
+        self.assertEqual(request["max_completion_tokens"], 1200)
+        self.assertEqual(request["reasoning_effort"], "low")
+        self.assertEqual(request["reasoning_format"], "hidden")
+        self.assertEqual(request["temperature"], 0.2)
         self.assertEqual(request["timeout"], 20.0)
-        self.assertIn("What is FI-04?", request["input"])
-        self.assertNotIn("62.5%", request["input"])
-        self.assertNotIn("3 of 5", request["input"])
+        self.assertIn("What is FI-04?", request["messages"][1]["content"])
+        self.assertNotIn("62.5%", request["messages"][1]["content"])
+        self.assertNotIn("3 of 5", request["messages"][1]["content"])
         self.assertNotIn("secret-value", repr(request))
         self.assertNotIn("secret-value", repr(provider))
 
     def test_provider_refuses_an_unredacted_payload(self):
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(output="text"))
+        provider = GroqProvider(api_key="secret", client=_FakeClient(output="text"))
         with self.assertRaises(ProviderInvalidResponse):
             provider.explain(build_explanation_payload("q", "62.5% of respondents"))
 
     def test_quota_error_is_translated_without_leaking_details(self):
-        error = RuntimeError("429 RESOURCE_EXHAUSTED for project-secret-key")
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(error=error))
+        error = RuntimeError("429 rate limit for project-secret-key")
+        provider = GroqProvider(api_key="secret", client=_FakeClient(error=error))
         with self.assertRaises(ProviderRateLimited) as raised:
             provider.explain(build_explanation_payload("q", "a"))
         self.assertNotIn("secret", str(raised.exception))
 
     def test_invalid_key_is_translated(self):
-        error = RuntimeError("401 API_KEY_INVALID")
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(error=error))
+        error = RuntimeError("401 invalid api key")
+        provider = GroqProvider(api_key="secret", client=_FakeClient(error=error))
         with self.assertRaises(ProviderAuthError):
             provider.explain(build_explanation_payload("q", "a"))
 
     def test_timeout_and_network_failures_are_translated(self):
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(error=TimeoutError("slow")))
+        provider = GroqProvider(api_key="secret", client=_FakeClient(error=TimeoutError("slow")))
         with self.assertRaises(ProviderTimeout):
             provider.explain(build_explanation_payload("q", "a"))
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(error=ConnectionError("down")))
+        provider = GroqProvider(api_key="secret", client=_FakeClient(error=ConnectionError("down")))
         with self.assertRaises(ProviderError):
             provider.explain(build_explanation_payload("q", "a"))
 
     def test_empty_provider_response_is_invalid(self):
-        provider = GeminiProvider(api_key="secret", client=_FakeClient(output="   "))
+        provider = GroqProvider(api_key="secret", client=_FakeClient(output="   "))
         with self.assertRaises(ProviderInvalidResponse):
             provider.explain(build_explanation_payload("q", "a"))
+
+    def test_official_client_disables_retries(self):
+        with mock.patch("groq.Groq") as client_class:
+            GroqProvider(api_key="secret-value")
+        kwargs = client_class.call_args.kwargs
+        self.assertEqual(kwargs["api_key"], "secret-value")
+        self.assertEqual(kwargs["max_retries"], 0)
+        self.assertEqual(kwargs["timeout"], 20.0)
+        with mock.patch("groq.Groq"):
+            provider = GroqProvider(api_key="secret-value")
+        self.assertNotIn("secret-value", repr(provider))
+
+
+class GroqSdkErrorTests(unittest.TestCase):
+    """Exercise real Groq SDK exceptions through an offline mock transport."""
+
+    @staticmethod
+    def _client(handler):
+        import httpx
+        from groq import Groq
+
+        return Groq(
+            api_key="gsk_distinctive_secret_value",
+            max_retries=0,
+            http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+
+    def _failure(self, handler):
+        provider = GroqProvider(api_key="gsk_distinctive_secret_value", client=self._client(handler))
+        with self.assertRaises(ProviderError) as raised:
+            provider.explain(build_explanation_payload("q", "a"))
+        self.assertNotIn("gsk_distinctive_secret_value", str(raised.exception))
+        return raised.exception
+
+    def test_status_codes_map_to_safe_error_classes(self):
+        import httpx
+
+        expected = {
+            401: ProviderAuthError,
+            429: ProviderRateLimited,
+            400: ProviderError,
+            500: ProviderError,
+        }
+        for status, error_class in expected.items():
+            with self.subTest(status=status):
+                error = self._failure(
+                    lambda request, s=status: httpx.Response(
+                        s, json={"error": {"message": "test failure"}}
+                    )
+                )
+                self.assertIs(type(error), error_class)
+
+    def test_timeout_and_connection_errors_are_safe(self):
+        import httpx
+
+        def slow(request):
+            raise httpx.ReadTimeout("slow", request=request)
+
+        def down(request):
+            raise httpx.ConnectError("down", request=request)
+
+        self.assertIs(type(self._failure(slow)), ProviderTimeout)
+        self.assertIs(type(self._failure(down)), ProviderError)
 
 
 class RedactionTests(unittest.TestCase):
@@ -269,6 +343,7 @@ class RedactionTests(unittest.TestCase):
         self.assertIsNone(restore_wording(redacted.replace("⟦V1⟧", "63.0%"), mapping))
         self.assertIsNone(restore_wording(redacted.replace("⟦V1⟧", ""), mapping))
         self.assertIsNone(restore_wording(redacted + " Again ⟦V1⟧.", mapping))
+        self.assertIsNone(restore_wording("⟦Q1⟧ " + redacted, mapping))
 
     def test_no_figures_still_rejects_invented_numbers(self):
         self.assertEqual(restore_wording("Plain definition.", {}), "Plain definition.")
@@ -404,6 +479,41 @@ class RefineAnswerTests(unittest.TestCase):
                     question_kind=kind, answer="Documentation text with 12.5%.", references=()
                 )
                 self.assertTrue(external_sharing_allowed(answer))
+
+    def test_question_figures_are_redacted_before_sending(self):
+        provider = _StubProvider(behaviour="echo")
+        question = "Explain FI-04: what does raising 56,000 Rwf mean?"
+        answer = answer_question(
+            question,
+            frame=self.frame,
+            profile=_fixture_profile(),
+            checks=run_quality_checks(self.frame),
+            source_label="test survey",
+        )
+        result = refine_answer_with_status(question, answer, provider)
+        self.assertEqual(result.status, "reworded")
+        self.assertNotIn("56,000", provider.called_with[0].question)
+        self.assertIn("⟦Q", provider.called_with[0].question)
+
+    def test_direct_identifiers_in_a_question_are_never_sent(self):
+        provider = _StubProvider(behaviour="echo")
+        for question in (
+            "Explain FI-01 — my email is person@example.com",
+            "Explain FI-01, record key 0042",
+            "Explain FI-01 with gsk_FAKE0123456789",
+        ):
+            with self.subTest(question=question[:24]):
+                answer = answer_question(
+                    question,
+                    frame=self.frame,
+                    profile=_fixture_profile(),
+                    checks=run_quality_checks(self.frame),
+                    source_label="test survey",
+                )
+                result = refine_answer_with_status(question, answer, provider)
+                self.assertEqual(result.status, "blocked")
+                self.assertEqual(result.answer, answer)
+        self.assertEqual(provider.called_with, [])
 
     def test_empty_and_over_long_questions_do_not_call_the_provider(self):
         provider = _StubProvider(behaviour="echo")

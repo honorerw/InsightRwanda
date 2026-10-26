@@ -50,7 +50,7 @@ from research.joint import (
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import MAX_QUESTION_LENGTH, answer_question
 from research.assistant_llm import (
-    GEMINI_DEFAULT_MODEL,
+    GROQ_DEFAULT_MODEL,
     get_configured_provider,
     refine_answer_with_status,
 )
@@ -333,7 +333,8 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .st-key-ask_panel {
   position: fixed; right: 1.4rem; bottom: 5.35rem; z-index: 1001;
   width: min(398px, calc(100vw - 2.8rem));
-  max-height: min(80vh, 660px); overflow-y: auto; overflow-x: hidden;
+  /* Keep the panel's top edge below the page header on short viewports too. */
+  max-height: min(calc(100vh - 14.5rem), 660px); overflow-y: auto; overflow-x: hidden;
   background: var(--card); border: 1px solid var(--line); border-radius: 18px;
   box-shadow: 0 24px 60px rgba(23,37,84,.24); padding: .85rem .9rem 1rem;
   animation: ask-in .18s ease-out both;
@@ -391,7 +392,7 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   /* Filter bar flows two selectboxes per row instead of four cramped ones */
   .filter-shell [data-testid="stColumn"] { flex:1 1 46% !important; width:46% !important; }
   .st-key-ask_launcher { right: 1.1rem; bottom: 1.1rem; }
-  .st-key-ask_panel { right: 1.1rem; bottom: 5rem; }
+  .st-key-ask_panel { right: 1.1rem; bottom: 5rem; max-height: min(calc(100vh - 13rem), 640px); }
 }
 /* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
 @media (max-width: 640px) {
@@ -432,8 +433,10 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   .st-key-mobile_menu_open button:hover { background:#f2faf5; border-color:#aaddc2; }
   .st-key-ask_launcher { right: .9rem; bottom: .9rem; }
   .st-key-ask_launcher button { font-size: .8rem; padding: .62rem .95rem; }
-  .st-key-ask_panel { left: .6rem; right: .6rem; bottom: 4.85rem; width: auto;
-    max-height: calc(100vh - 11.2rem); max-height: calc(100dvh - 11.2rem); border-radius: 16px; }
+  /* On phones the header wraps; anchor the panel below it rather than letting
+     a bottom-anchored max-height creep up over the brand row. */
+  .st-key-ask_panel { left: .6rem; right: .6rem; top: 16.5rem; bottom: 4.85rem; width: auto;
+    max-height: none; border-radius: 16px; }
   .ask-head { padding-right: 4.4rem; }
   .ask-title { font-size: .88rem; }
   .ask-subtitle { font-size: .7rem; }
@@ -1861,9 +1864,11 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Ask InsightRwanda — offline, evidence-based assistant UI (Phase C2)
+# Ask InsightRwanda — evidence-based assistant UI
 # Every number is produced by research/assistant.py from the loaded survey
-# records; the UI only presents provenance. No LLM, no network, no secrets.
+# records. An optional Groq layer can only reword a verified answer after
+# its figures are replaced locally; with no configured key nothing leaves the
+# app and the deterministic answer is shown unchanged.
 # -----------------------------------------------------------------------------
 ASK_SUGGESTIONS: tuple[str, ...] = (
     "What does financial inclusion mean?",
@@ -1873,21 +1878,21 @@ ASK_SUGGESTIONS: tuple[str, ...] = (
     "Which findings require further verification?",
 )
 ASK_AI_STATUS: dict[str, str] = {
-    "disabled": "Gemini is not configured on this deployment, so this answer uses the verified "
-                "project rules only. An administrator can add GEMINI_API_KEY to enable AI wording.",
+    "disabled": "Groq is not configured on this deployment, so this answer uses the verified "
+                "project rules only. An administrator can add GROQ_API_KEY to enable AI wording.",
     "blocked": "This answer was kept entirely local because its evidence is not approved for "
                "external sharing. No text from it was sent to an AI provider.",
-    "rate_limited": "Gemini's free-tier quota or rate limit was reached. The verified project "
-                    "answer is shown unchanged; please try again later.",
-    "invalid_key": "Gemini rejected the configured API key. The verified project answer is shown "
+    "rate_limited": "Groq's quota or rate limit was reached. The verified project answer is shown "
+                    "unchanged; please try again later.",
+    "invalid_key": "Groq rejected the configured API key. The verified project answer is shown "
                    "unchanged; an administrator should check the deployment secret.",
-    "timeout": "Gemini did not respond in time. The verified project answer is shown unchanged; "
+    "timeout": "Groq did not respond in time. The verified project answer is shown unchanged; "
                "no retry was attempted.",
-    "invalid_response": "Gemini returned no usable text. The verified project answer is shown "
+    "invalid_response": "Groq returned no usable text. The verified project answer is shown "
                         "unchanged.",
-    "unavailable": "The Gemini wording layer is temporarily unavailable. The verified project "
+    "unavailable": "The Groq wording layer is temporarily unavailable. The verified project "
                    "answer is shown unchanged.",
-    "guard_rejected": "Gemini's wording changed a protected figure or added a new one, so it was "
+    "guard_rejected": "Groq's wording changed a protected figure or added a new one, so it was "
                       "discarded. The verified project answer is shown unchanged.",
 }
 ASK_SUMMARY: str = (
@@ -1962,30 +1967,43 @@ def _ask_queue(question: str | None = None) -> None:
     st.session_state["ask_pending"] = question
 
 
-def _ask_provider():
-    """Return the optional Gemini provider, reading the key without ever exposing it.
+def _ask_setting(name: str) -> str:
+    """Read an assistant setting from Streamlit secrets, then the environment."""
 
-    Streamlit secrets are the deployment path; GEMINI_API_KEY in the environment
-    is the local fallback. Missing or malformed configuration means no provider,
-    never a silent switch to another service.
+    try:
+        value = st.secrets.get(name, "")
+    except Exception:
+        value = ""
+    if not value:
+        value = os.environ.get(name, "")
+    return str(value or "").strip()
+
+
+def _ask_provider():
+    """Return the optional Groq provider, reading the key without ever exposing it.
+
+    Streamlit secrets are the deployment path; environment variables are the
+    local fallback. Missing or malformed configuration means no provider, never
+    a silent switch to another service. The provider is created once per
+    session so typing in the chat does not open a new client on every rerun.
     """
 
-    key = ""
-    try:
-        key = str(st.secrets.get("GEMINI_API_KEY", "") or "").strip()
-    except Exception:
-        key = ""
-    if not key:
-        key = str(os.environ.get("GEMINI_API_KEY", "") or "").strip()
+    provider = st.session_state.get("ask_provider")
+    if provider is not None:
+        return provider
+    key = _ask_setting("GROQ_API_KEY")
     if not key:
         return None
     try:
-        return get_configured_provider(
+        provider = get_configured_provider(
             key,
-            environ={"GEMINI_MODEL": str(os.environ.get("GEMINI_MODEL", "") or "")},
+            environ={"GROQ_MODEL": _ask_setting("GROQ_MODEL")},
         )
     except Exception:
         return None
+    if provider is not None:
+        st.session_state["ask_provider"] = provider
+    return provider
 
 
 def _ask_toggle_panel(open_panel: bool | None = None) -> None:
@@ -2042,8 +2060,8 @@ def _ask_process(
         })
         st.session_state["ask_input"] = ""
         return
-    # Optional Gemini wording layer. It stays off unless the deployment sets
-    # GEMINI_API_KEY. It receives only an already-grounded answer whose figures
+    # Optional Groq wording layer. It stays off unless the deployment sets
+    # GROQ_API_KEY. It receives only an already-grounded answer whose figures
     # have been replaced with local tokens, and any provider failure or changed
     # figure returns the deterministic text unchanged.
     provider = _ask_provider()
@@ -2135,7 +2153,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             key="ask_launch",
             icon=":material/forum:",
             help="Open the InsightRwanda AI Assistant. Answers use verified project "
-                 "evidence; an optional Gemini wording layer runs only when configured.",
+                 "evidence; an optional Groq wording layer runs only when configured.",
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
@@ -2143,9 +2161,9 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
 
     provider = _ask_provider()
     badge = (
-        f"Verified project rules · Gemini not configured · answers stay local"
+        f"Verified project rules · Groq not configured · answers stay local"
         if provider is None else
-        f"Gemini {getattr(provider, 'model', GEMINI_DEFAULT_MODEL)} · figures are replaced "
+        f"Groq {getattr(provider, 'model', GROQ_DEFAULT_MODEL)} · figures are replaced "
         "with local tokens before sending · AI wording may need verification"
     )
 
@@ -2170,8 +2188,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
         if provider is None:
             st.caption(
-                "Gemini is not configured here. Answers still use the verified project rules. "
-                "An administrator can set GEMINI_API_KEY in Streamlit secrets or the environment."
+                "Groq is not configured here. Answers still use the verified project rules. "
+                "An administrator can set GROQ_API_KEY in Streamlit secrets or the environment."
             )
 
         pending = st.session_state.pop("ask_pending", None)
@@ -2234,7 +2252,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             )
         st.markdown(
             "<div class='ask-foot'>Do not enter personal or household-level details. Only your "
-            "question and approved project wording are sent when Gemini is configured; survey "
+            "question and approved project wording are sent when Groq is configured; survey "
             "figures are replaced locally before sending. AI wording may contain errors and is "
             "not an official NISR conclusion.</div>",
             unsafe_allow_html=True,

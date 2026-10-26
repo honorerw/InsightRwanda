@@ -10,8 +10,10 @@ handling, unavailable evidence and household-level data-access refusals.
 
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from streamlit.testing.v1 import AppTest
 
@@ -77,7 +79,7 @@ class AssistantPanelUiTests(unittest.TestCase):
         rendered = self.markdown_text()
         self.assertIn("InsightRwanda AI Assistant", rendered)
         self.assertIn("Ask questions about Rwanda's financial inclusion and poverty insights.", rendered)
-        self.assertIn("Gemini not configured", rendered)
+        self.assertIn("Groq not configured", rendered)
         self.assertIn("answers stay local", rendered)
         self.assertIn("Ask about verified insights", rendered)
         self.assertIn("replaced with local tokens", rendered)
@@ -139,7 +141,7 @@ class AssistantPanelUiTests(unittest.TestCase):
     def test_configuration_and_privacy_notes_are_visible(self) -> None:
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
-        self.assertIn("GEMINI_API_KEY", rendered)
+        self.assertIn("GROQ_API_KEY", rendered)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertIn("not an official NISR conclusion", rendered)
         # Only human-readable UI text is scanned: strip the global <style>
@@ -149,6 +151,24 @@ class AssistantPanelUiTests(unittest.TestCase):
         text_only = re.sub(r"<style>.*?</style>", " ", rendered, flags=re.DOTALL)
         text_only = re.sub(r"<[^>]*>", " ", text_only)
         self.assertIsNone(re.search(r"sk-[A-Za-z0-9_\-]{8,}", text_only))
+
+    def test_configured_groq_is_labelled_without_exposing_the_key(self) -> None:
+        # A fake key exercises the configuration gate and client setup; no
+        # question is sent, so this test never contacts the provider.
+        with mock.patch.dict(
+            os.environ, {"GROQ_API_KEY": "gsk_FAKE-test-placeholder"}, clear=False
+        ):
+            at = AppTest.from_file(APP_FILE, default_timeout=TIMEOUT_SECONDS)
+            at.run()
+            self.assertFalse(list(at.exception))
+            at.button(key="ask_launch").click()
+            at.run()
+            self.assertFalse(list(at.exception))
+            rendered = " ".join(e.value for e in at.markdown)
+            rendered += " " + " ".join(e.value for e in at.caption)
+        self.assertIn("Groq openai/gpt-oss-120b", rendered)
+        self.assertNotIn("gsk_FAKE-test-placeholder", rendered)
+        self.assertTrue(at.session_state["ask_provider"] is not None)
 
     def test_example_question_and_unavailable_evidence(self) -> None:
         self.open_panel()

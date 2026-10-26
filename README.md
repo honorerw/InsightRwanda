@@ -45,13 +45,91 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 159 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
+The current test suite contains 170 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
 filtering, source errors, publication gates, bootstrap intervals, income-band
 context estimates, the official-poverty unlock contract and the ten one-page
 briefs (content, weighting arithmetic, deterministic rendering, PDF/PNG validity
 and identifier exclusion).
+
+## Ask InsightRwanda AI Assistant
+
+The floating **AI Assistant** button at the bottom-right of every page opens an
+in-screen chat panel — no external website, no page reload. The panel keeps its
+conversation in Streamlit session state, offers example questions, a loading
+indicator, a **New conversation** action, and a **Close** button.
+
+The assistant is **evidence-first**:
+
+- The deterministic core (`research/assistant.py`) answers from the project's
+  verified indicator definitions, calculation rules, documented limitations,
+  quality checks, navigation and data-governance status. Numeric answers are
+  computed live from the loaded survey records at the active lens, with the
+  survey's household weight and visible denominators.
+- It refuses household-level or personal requests and says plainly when
+  information is unavailable or unverified; it never invents statistics,
+  sources, intervals, geographic findings or research conclusions.
+- The optional Groq layer (`research/assistant_llm.py`) can **only reword**
+  an already-verified answer. It never chooses statistics, adds citations or
+  changes a publication/authorisation gate. Every figure in both the question
+  and the answer is replaced locally with a placeholder (`⟦Q1⟧` for the
+  question, `⟦V1⟧`, `⟦V2⟧`, … for the answer) before transmission, and
+  restored only if the returned wording preserves every figure and adds none.
+  Questions containing an email address, key-like token or explicit identifier
+  phrase are blocked.
+- On a missing key, quota/rate limit, invalid key, timeout, network failure or
+  a changed figure, the verified answer is shown unchanged. There are no
+  automatic retries and no paid fallback provider.
+
+### Enable Groq locally
+
+1. Create an API key in the [Groq console](https://console.groq.com/keys).
+2. Copy the tracked example and fill in your key:
+
+   ```bash
+   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+   ```
+
+   `.streamlit/secrets.toml` is git-ignored. Alternatively export the key:
+
+   ```bash
+   export GROQ_API_KEY="your-key"
+   ```
+
+3. Optionally set `GROQ_MODEL` (Streamlit secret or environment variable). The
+   default is `openai/gpt-oss-120b`, a current production model on Groq.
+4. Restart `streamlit run app.py`. The panel shows the active Groq model when a
+   key is configured; otherwise it states that answers stay local.
+
+### Configure the key on Render
+
+In the Render dashboard open the service → **Environment** → add
+`GROQ_API_KEY` as a secret environment variable (and optionally `GROQ_MODEL`),
+then save and redeploy. Do not add the key to `render.yaml`, a committed `.env`
+file or any source file. The app never logs or displays the key, and all
+provider failures are reduced to safe status messages.
+
+### Free tier and quotas
+
+Groq currently offers a rate-limited free tier for developer accounts, but free
+usage is **limited and not guaranteed**, and limits differ by model. Check the
+**Limits** page in the Groq console for the exact allowance on your account;
+do not assume unlimited requests. The app sets `max_completion_tokens=1200`, a
+20-second request timeout, a 600-character question limit, a 40-message history
+cap and a 12,000-character payload cap. It disables the SDK's automatic retries
+so a failed request cannot silently consume the quota again, and it reports an
+exhausted quota instead of promising unlimited free usage. No billing is
+configured by the app.
+
+Groq's data policy states that inference inputs and outputs are not retained by
+default, though they may be logged for up to 30 days for reliability and abuse
+monitoring unless the organisation enables Zero Data Retention. The assistant
+sends only non-sensitive, already-displayed documentation, with every survey
+figure redacted; raw records, identifiers, file paths, source inventory and
+unpublished/restricted outputs are never transmitted. If that external sharing
+is not acceptable for your deployment, leave `GROQ_API_KEY` unset — the
+assistant continues to work entirely locally.
 
 ## Reproducibility record
 
