@@ -313,6 +313,9 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 /* InsightRwanda AI Assistant — floating launcher + in-screen panel.
    Fixed positioning keeps it out of page flow, so charts, tables, the sidebar
    and the Streamlit toolbar are never pushed or hidden. */
+/* Mobile navigation Menu pill — a fixed control shown only on phones, where the
+   rail becomes a drawer. On desktop the element is removed from flow entirely. */
+.st-key-mobile_menu_open { display:none; }
 .st-key-ask_launcher { position: fixed; right: 1.4rem; bottom: 1.35rem; z-index: 1000; width: auto; }
 .st-key-ask_launcher button {
   position: relative; border-radius: 999px; border: 1px solid #2443b8;
@@ -415,6 +418,18 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   .chart-card { padding:.9rem .9rem .7rem; }
   .callout { font-size:.76rem; padding:.75rem .85rem; }
   .side-card { font-size:.64rem; }
+  /* Phones: the rail is a hidden drawer, not a squeezed column. A Menu pill
+     (fixed in the toolbar strip) opens it; the rail's own toggle or picking a
+     page closes it. Streamlit's mobile auto-collapse also leaks its native
+     header items (expand arrow, default logo) into the toolbar strip — the
+     whole native strip is removed so the branded pill is the only control. */
+  header[data-testid="stHeader"] { display:none !important; }
+  [data-testid="stSidebar"] { display:none !important; }
+  .st-key-mobile_menu_open { display:block !important; position:fixed; top:.55rem; left:.75rem; z-index:1000; width:auto; }
+  .st-key-mobile_menu_open button { border-radius:999px; border:1px solid #bfe6cf; background:#fff; color:#14532d;
+    font-weight:700; font-size:.78rem; padding:.5rem .85rem; box-shadow:0 4px 14px rgba(23,33,61,.18); gap:.3rem; }
+  .st-key-mobile_menu_open button svg { fill:#059669; }
+  .st-key-mobile_menu_open button:hover { background:#f2faf5; border-color:#aaddc2; }
   .st-key-ask_launcher { right: .9rem; bottom: .9rem; }
   .st-key-ask_launcher button { font-size: .8rem; padding: .62rem .95rem; }
   .st-key-ask_panel { left: .6rem; right: .6rem; bottom: 4.85rem; width: auto;
@@ -466,6 +481,17 @@ def app_header() -> None:
         """,
         unsafe_allow_html=True,
     )
+    # Mobile navigation: the fixed Menu pill sits in the toolbar strip on phones,
+    # where the rail is a hidden drawer (see the phone media query in CSS above).
+    # The pill styles the *button's* key wrapper, not a container: a fixed
+    # container collapses to zero width (its inner block is width:100%).
+    st.button(
+        "Menu",
+        key="mobile_menu_open",
+        icon=":material/menu:",
+        on_click=_open_mobile_menu,
+        help="Open the navigation drawer",
+    )
     # The AI Assistant lives in a fixed launcher rendered at the end of main(),
     # so it never consumes page space and opens without leaving this screen.
 
@@ -484,7 +510,15 @@ NAV_ICONS = {
 }
 
 
+def _open_mobile_menu() -> None:
+    st.session_state["mobile_drawer_open"] = True
+
+
 def _toggle_sidebar() -> None:
+    if st.session_state.pop("mobile_drawer_open", False):
+        # First press with the phone drawer open only closes the drawer;
+        # the desktop rail's collapsed state is left untouched.
+        return
     st.session_state["sidebar_collapsed"] = not st.session_state.get("sidebar_collapsed", False)
 
 
@@ -505,6 +539,27 @@ COLLAPSED_SIDEBAR_CSS = """
 [data-testid="stSidebar"] [data-testid="stColumn"] { flex:0 0 100% !important; width:100% !important; }
 [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] { flex-wrap:wrap; row-gap:0; }
 .st-key-side_actions .stButton button { padding:.62rem .3rem; }
+</style>
+"""
+
+
+# Phones-only drawer: while the Menu pill is armed, the rail renders as a fixed
+# overlay column over the page. Everything is !important because Streamlit's
+# resizable handle writes inline position/width/height styles on the rail, and
+# inline styles beat plain stylesheet declarations. The markdown is injected in
+# the main flow (not the sidebar) so this sheet lands AFTER the base CSS in
+# document order — the base phone rule hides the rail with the same !important,
+# and cascade order between equally-important rules is document order.
+MOBILE_DRAWER_CSS = """
+<style>
+@media (max-width: 640px) {
+  [data-testid="stSidebar"] { display:flex !important; position:fixed !important; left:0 !important; top:0 !important;
+    bottom:0 !important; width:min(310px, 86vw) !important; min-width:250px !important; max-width:86vw !important;
+    height:100dvh !important; z-index:1001 !important;
+    overflow-y:auto !important; overscroll-behavior:contain !important; margin:0 !important; transform:none !important;
+    visibility:visible !important; opacity:1 !important;
+    box-shadow:6px 0 26px rgba(23,33,61,.28), 0 0 0 1px #d8e8dd; }
+}
 </style>
 """
 
@@ -596,6 +651,7 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
                 if pressed:
                     current = page
                     st.session_state["workspace_nav"] = page
+                    st.session_state["mobile_drawer_open"] = False
         st.markdown(
             '<div class="side-card"><div class="side-card-title">Pages at a glance</div><div class="side-card-copy">'
             "01 Overview — headline numbers for all of Rwanda<br>"
@@ -2295,6 +2351,11 @@ def main() -> None:
 
     app_header()
     page = nav(df, profile, checks)
+    # The drawer CSS is injected in the main flow AFTER nav() so its style sheet
+    # lands after the base CSS in document order (cascade ties are document
+    # order) — see the MOBILE_DRAWER_CSS comment for why that is load-bearing.
+    if st.session_state.get("mobile_drawer_open", False):
+        st.markdown(MOBILE_DRAWER_CSS, unsafe_allow_html=True)
     if page == "Overview":
         render_overview(df)
     elif page == "Financial inclusion":
