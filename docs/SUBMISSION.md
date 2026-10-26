@@ -6,7 +6,7 @@ Read this before choosing between running the app and reviewing the screenshots 
 
 *All screenshots below are real captures of the running application (headless Chrome via the DevTools protocol, marker-verified per page).*
 
-**Take-away briefs:** every page also offers a one-page insight brief (PDF + PNG) via download buttons in the app, and committed copies live in `docs/briefs/` (`python scripts/build_briefs.py` regenerates them). Briefs are aggregate-only — no household records, no gated exports — with an explicit "what this brief cannot claim" panel, a "Preview first" modal, and three further governance modals (the poverty unlock contract, the explorer gate explainer). Motion is CSS-only with staggered card entrances, a KPI count-up, and a `prefers-reduced-motion` fallback for accessibility.
+**Take-away briefs:** committed one-page insight briefs (PDF + PNG) live in `docs/briefs/` (`python scripts/build_briefs.py` regenerates them). Briefs are aggregate-only — no household records, no gated exports — with an explicit "what this brief cannot claim" panel and a governance modal (the explorer gate explainer). Motion is CSS-only with staggered card entrances, a KPI count-up, and a `prefers-reduced-motion` fallback for accessibility.
 
 ---
 

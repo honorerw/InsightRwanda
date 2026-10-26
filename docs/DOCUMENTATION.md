@@ -3,7 +3,7 @@
 **Project:** InsightRwanda · Financial Inclusion & Poverty Research Analytics
 **Context:** NISR 2026 Big Data Hackathon — Track 2 (Financial Inclusion & Poverty Reduction in Rwanda)
 **Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18
-**Current state at documentation time:** 117/117 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG exports), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
+**Current state at documentation time:** 159/159 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG renders), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
 
 > Verified at a recent audit: SHA-256 `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae` · analysis version `financial_inclusion_135869b472e3`
 
@@ -284,7 +284,7 @@ One-page, non-gated insight briefs (added 2026-10-20): each of the nine dashboar
 | `render_brief_png(brief)` / `render_brief_pdf(brief)` | Deterministic A4 @ 200 dpi renders via Pillow. The PDF embeds the same rendered page as the PNG, so brief text is an image, not selectable text. |
 | `brief_filenames(brief)` | Stable names, e.g. `brief_overview.pdf` / `brief_overview.png`. |
 
-Non-gated by construction: briefs contain only aggregate values produced by the existing estimators — no household identifiers, no raw records, no gated exports — and every brief repeats what its numbers cannot claim in a caution panel. In the app, `render_brief_export` adds a PDF/PNG download pair to each page reflecting the currently selected analysis lens. Committed copies: `docs/briefs/` (regenerate with `python scripts/build_briefs.py`).
+Non-gated by construction: briefs contain only aggregate values produced by the existing estimators — no household identifiers, no raw records, no gated exports — and every brief repeats what its numbers cannot claim in a caution panel. The in-app brief export (`render_brief_export`, "Preview first" modal + PDF/PNG download pair) was removed from the UI in a later refinement; committed copies: `docs/briefs/` (regenerate with `python scripts/build_briefs.py`).
 
 ### 4.6 `research/spss_pipeline.py`
 
@@ -373,11 +373,9 @@ The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **
 
 ### Modals and motion (added 2026-10-20)
 
-Three native `@st.dialog` modals, opened via in-page buttons:
+Two native `@st.dialog` modals, opened via in-page buttons:
 
-- **Poverty unlock contract** (`official_poverty_contract_modal`, Poverty insights → "How can this be unlocked?") — the missing-inputs contract in one overlay.
 - **Explorer gate** (`explorer_gate_modal`, Data explorer → "Why is this withheld?") — the gate rule and current governance state.
-- **Brief preview** (`brief_preview_modal`, every page → "Preview first") — the page brief's KPIs and caution panel before downloading.
 
 Motion design: staggered card entrances (`metric-card exercise data-delay`, `chart-card`/`filter-shell`/`page-intro` CSS delays), all CSS-only, plus a global `@media (prefers-reduced-motion: reduce)` guard that disables every animation for users (and judges) who request it. No `data-testid` selectors are used for motion, so Streamlit internals can change without breaking the visuals.
 
@@ -390,7 +388,7 @@ The predictive workflow was moved out of the Overview into its own page (`06 / P
 
 **Explicitly not a poverty or eligibility model** — the page captions mark every figure as a predictive association on resampled rows.
 
-The page inherits the Overview's lens filter behaviour (prefix `predictive`) and its page brief reuses the cached model record (`build_page_brief(..., model_record=...)`) so brief export never refits.
+The page inherits the Overview's lens filter behaviour (prefix `predictive`).
 
 ---
 

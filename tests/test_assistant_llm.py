@@ -328,7 +328,12 @@ class RefineAnswerTests(unittest.TestCase):
         self.assertIn("Rwf", result.answer.answer)
         self.assertEqual(result.answer.references, self.answer.references)
         self.assertNotIn("62.5%", provider.called_with[0].verified_answer)
-        self.assertNotIn("Rwf", provider.called_with[0].verified_answer.replace("⟦V", ""))
+        # No raw figure is transmitted: strip placeholder tokens and public
+        # citations, then no digits may remain (the 'Rwf' unit itself is text).
+        import re
+        probe = re.sub(r"⟦V\d+⟧", "", provider.called_with[0].verified_answer)
+        probe = probe.replace("FI-04", "")
+        self.assertFalse(re.search(r"\d", probe), provider.called_with[0].verified_answer)
 
     def test_added_or_missing_figures_are_guard_rejected(self):
         for behaviour in ("add_number", "drop_token", "duplicate_token"):

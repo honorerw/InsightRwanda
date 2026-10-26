@@ -25,7 +25,7 @@ The application is connected to **two supplied sources**: the master `data/FinSc
 - Geographic comparisons using the supplied province/district identifiers.
 - An explicit poverty-status page that reports blockers rather than fabricating poverty rates.
 - Governance-gated aggregate data explorer; household-level preview and raw export stay disabled pending explicit authorization, publication approval and an approved disclosure rule.
-- One-page, non-gated insight brief for every page (PDF + PNG) — download buttons in the app and committed copies in `docs/briefs/`; aggregate values only, no household records.
+- One-page, non-gated insight brief for every page (PDF + PNG) — committed copies in `docs/briefs/`; aggregate values only, no household records.
 - A dedicated Predictive insights page: candidate comparison under group-stratified cross-validation, held-out scorecard, threshold trade-off analysis and subgroup model performance with low-evidence flags.
 - Methods, source profile, governance status and evidence-chain pages.
 - Real-source tests in `tests/test_real_pipeline.py` plus estimation, brief, and second-source SPSS suites (including a synthetic `.sav` fixture and a real 12,480-row integration test).
@@ -45,7 +45,7 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 117 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
+The current test suite contains 159 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
 filtering, source errors, publication gates, bootstrap intervals, income-band
@@ -83,17 +83,20 @@ The project calculates descriptive, weighted estimates. It does not claim
 official publication status or survey-design standard errors because the
 workspace does not supply the required methodology and variance documentation.
 Bootstrap interval estimates (nonparametric, weighted, seeded) are provided
-for every financial-inclusion indicator with an explicit note that they are
-not survey-design standard errors. Labelled income-band context estimates
-(EI-01…EI-03, from the embedded N11a_lbl/N12a_lbl band labels) are reported
-as exploratory financial context on the Poverty insights page: they are not
+for every financial-inclusion indicator by the estimation layer
+(`research/estimation.py`, covered by its own test suite) with an explicit note
+that they are not survey-design standard errors. Labelled income-band context
+estimates (EI-01…EI-03, from the embedded N11a_lbl/N12a_lbl band labels)
+surfaced earlier as exploratory financial context on the Poverty insights page
+and remain part of that layer and the page briefs: they are not
 poverty rates. An official poverty estimation stays blocked behind a
 code-enforced contract (`official_poverty_status`) until a documented poverty
 line, poverty concept, welfare aggregate, variance documentation,
 authorization record and publication approval are all supplied explicitly.
 
-Every page also offers a one-page insight brief (PDF and PNG, one per page,
-nine total; committed copies in `docs/briefs/`). Briefs contain aggregate
+One-page insight briefs per dashboard page (PDF and PNG, one per page,
+nine total; committed copies in `docs/briefs/`, regenerated with
+`python scripts/build_briefs.py`). Briefs contain aggregate
 values only — never household records or gated exports — and repeat what their
 numbers cannot claim. The PDF embeds the same rendered page as the PNG
 (Pillow, 200 dpi), so brief text is an image, not selectable text.

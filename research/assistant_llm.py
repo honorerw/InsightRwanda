@@ -402,25 +402,22 @@ def _drop_public_citations(text: str) -> str:
 def redact_figures(text: str) -> tuple[str, dict[str, str]]:
     """Replace every survey figure with a local placeholder.
 
-    Returns the redacted text and a placeholder→original mapping. Repeated
-    figures reuse one placeholder. Indicator IDs and page citations are public
-    documentation and are deliberately left readable. The mapping never leaves
-    the process; only ``redacted`` is placed in an ``ExplanationPayload``.
+    Returns the redacted text and a placeholder→original mapping. Every
+    occurrence receives its own token (``⟦V1⟧``, ``⟦V2⟧ …), so a figure that
+    appears several times in the answer is protected and restored at each of
+    its positions. Indicator IDs and page citations are public documentation
+    and are deliberately left readable. The mapping never leaves the process;
+    only ``redacted`` is placed in an ``ExplanationPayload``.
     """
 
     mapping: dict[str, str] = {}
-    by_value: dict[str, str] = {}
     parts: list[str] = []
     cursor = 0
     for match in _FIGURE_OR_CITATION.finditer(str(text)):
         if match.group("citation"):
             continue
-        figure = match.group("figure")
-        token = by_value.get(figure)
-        if token is None:
-            token = f"⟦V{len(mapping) + 1}⟧"
-            mapping[token] = figure
-            by_value[figure] = token
+        token = f"⟦V{len(mapping) + 1}⟧"
+        mapping[token] = match.group("figure")
         parts.append(str(text)[cursor:match.start()])
         parts.append(token)
         cursor = match.end()

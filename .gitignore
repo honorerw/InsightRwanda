@@ -8,3 +8,4 @@ venv/
 # Derived combined dataset: respondent-level rows, regenerated locally
 # with scripts/build_combined_dataset.py. Never published by the app.
 data/derived/
+.env*

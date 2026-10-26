@@ -31,20 +31,8 @@ from research.modeling import (
     threshold_metrics,
     train_final_model,
 )
-from research.estimation import (
-    BOOTSTRAP_NOTE,
-    CONTEXT_ESTIMATES,
-    calculate_context_estimate,
-    context_weight_distribution,
-    official_poverty_status,
-    weighted_bootstrap_ci,
-)
 from research.briefs import (
     LENS_PREFIXES,
-    brief_filenames,
-    build_page_brief,
-    render_brief_pdf,
-    render_brief_png,
 )
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
 from research.joint import (
@@ -60,7 +48,7 @@ from research.joint import (
     weighted_correlation,
 )
 from research.quality import QualityCheck, quality_summary, run_quality_checks
-from research.assistant import AssistantAnswer, MAX_QUESTION_LENGTH, answer_question
+from research.assistant import MAX_QUESTION_LENGTH, answer_question
 from research.assistant_llm import (
     GEMINI_DEFAULT_MODEL,
     get_configured_provider,
@@ -215,14 +203,32 @@ footer { display: none !important; }
 .st-key-filter_chips .stButton button:hover { border-color:#8fc7a8; background:#f2faf5; color:#14532d; }
 .st-key-filter_chips [data-testid="stIconMaterial"] { font-size:.85rem; }
 
-.app-header { display:flex; align-items:center; justify-content:space-between; padding: .15rem .1rem 1.15rem; border-bottom: 1px solid var(--line); margin-bottom: 1.55rem; }
-.brand { display:flex; align-items:center; gap:.75rem; }
-.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #34d399, #059669); color:white; display:flex; align-items:center; justify-content:center; font-family:'Roboto', Arial, Verdana, sans-serif; font-size: 1.2rem; font-weight:700; box-shadow: 0 8px 20px rgba(5,150,105,.2); }
-.brand-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.05rem; font-weight:600; letter-spacing:-.01em; }
-.brand-sub { color: var(--muted); font-size:.7rem; margin-top:.12rem; }
-.header-meta { display:flex; align-items:center; gap:.75rem; color:var(--muted); font-size:.77rem; }
-.live-pill { display:flex; align-items:center; gap:.38rem; border:1px solid #cbd5ff; color:var(--green-dark); background:#f0f3ff; border-radius:999px; padding:.4rem .72rem; font-weight:700; box-shadow:0 3px 10px rgba(49,85,212,.06); }
-.live-dot { width:7px; height:7px; background:#5274e6; border-radius:50%; box-shadow:0 0 0 4px #dbe2ff; }
+/* Masthead: elevated card with soft gradient wash and decorative sweep */
+.app-header { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  padding:1rem 1.35rem; border:1px solid var(--line); border-radius:18px; margin-bottom:1.55rem;
+  background:linear-gradient(120deg, #f7fdf9 0%, #f5f8ff 52%, #eef3ff 100%);
+  box-shadow:0 10px 30px rgba(23,33,61,.06), 0 2px 6px rgba(23,33,61,.03); }
+.app-header::before { content:''; position:absolute; top:-68px; right:-52px; width:220px; height:180px; border-radius:50%;
+  background:radial-gradient(closest-side, rgba(49,85,212,.10), transparent 70%); pointer-events:none; }
+.app-header::after { content:''; position:absolute; bottom:-72px; left:34%; width:200px; height:150px; border-radius:50%;
+  background:radial-gradient(closest-side, rgba(5,150,105,.09), transparent 70%); pointer-events:none; }
+.app-header > * { position:relative; z-index:1; }
+.brand { display:flex; align-items:center; gap:.85rem; }
+.brand-mark { position:relative; width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(145deg, #34d399, #059669); color:white; display:flex; align-items:center; justify-content:center; font-family:'Roboto', Arial, Verdana, sans-serif; font-size: 1.25rem; font-weight:700; box-shadow: 0 10px 24px rgba(5,150,105,.25); }
+.brand-mark::after { content:''; position:absolute; inset:-5px; border-radius:18px; border:1px solid rgba(5,150,105,.22); }
+.brand-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.12rem; font-weight:700; letter-spacing:-.01em; color:var(--ink); }
+.brand-name span { color:var(--green); }
+.brand-sub { color: var(--muted); font-size:.72rem; margin-top:.16rem; letter-spacing:.01em; }
+.header-meta { display:flex; align-items:center; gap:.55rem; }
+.header-chip { display:flex; flex-direction:column; gap:.1rem; border:1px solid var(--line); background:rgba(255,255,255,.8);
+  border-radius:12px; padding:.42rem .7rem; box-shadow:0 2px 8px rgba(23,33,61,.04); }
+.header-chip small { font-family:'Roboto Mono','Courier New',monospace; font-size:.56rem; text-transform:uppercase; letter-spacing:.14em; color:var(--muted); }
+.header-chip b { font-size:.74rem; font-weight:700; color:var(--ink); white-space:nowrap; }
+.live-pill { display:flex; align-items:center; gap:.42rem; border:1px solid #cbd5ff; color:var(--green-dark); background:rgba(255,255,255,.85);
+  border-radius:999px; padding:.5rem .82rem; font-weight:700; font-size:.76rem; box-shadow:0 3px 10px rgba(49,85,212,.06); white-space:nowrap; }
+.live-dot { width:8px; height:8px; background:#5274e6; border-radius:50%; box-shadow:0 0 0 4px #dbe2ff; animation:live-pulse 2.2s ease-in-out infinite; }
+@keyframes live-pulse { 0%,100% { box-shadow:0 0 0 4px #dbe2ff; } 50% { box-shadow:0 0 0 7px rgba(219,226,255,.35); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation:none; } }
 
 .eyebrow { font-family:'Roboto Mono','Courier New',monospace; font-size:.62rem; text-transform:uppercase; letter-spacing:.16em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
 .page-intro { padding: .15rem 0 .2rem; }
@@ -280,7 +286,6 @@ div[data-testid="stExpander"] { border-color:var(--line); border-radius:12px; ba
 .download-row { display:flex; justify-content:flex-end; margin-top:.45rem; }
 button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--green-dark); font-weight:600; }
 
-<<<<<<< HEAD
 .footer-note { color:#5f6866; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
 button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
 /* InsightRwanda AI Assistant — floating launcher + in-screen panel.
@@ -336,12 +341,6 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .ask-empty-title { font-weight: 700; font-size: .82rem; color: var(--ink); }
 .ask-empty-copy { font-size: .72rem; color: var(--muted); line-height: 1.45; margin-top: .2rem; }
 .ask-intro { font-size: .74rem; color: var(--muted); margin: 0 0 .6rem; }
-=======
-.footer-note { color:#5f6866; font-size:.68rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.55; }
-button, [role="button"] { font-family:'Roboto', Arial, Verdana, sans-serif; }
-/* Ask InsightRwanda conversation surfaces */
-.ask-intro { font-size: .8rem; color: var(--muted); margin: 0 0 .6rem; }
->>>>>>> a015a3c (commited by dna)
 .ask-q { background: var(--paper); border: 1px solid var(--line); border-radius: 10px 10px 3px 10px;
   padding: .55rem .7rem; font-size: .84rem; max-width: 92%; word-wrap: break-word; }
 .ask-switch { background: #faf6ea; border: 1px dashed #cbbf8f; border-radius: 8px; padding: .45rem .65rem;
@@ -356,20 +355,17 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="rad
 summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green) !important; outline-offset: 2px; }
 [data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible, [data-testid="stSidebar"] [data-testid="stSelectbox"]:focus-within { outline-color: #059669 !important; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
-<<<<<<< HEAD
 @media (max-width: 900px) { .block-container { padding: .8rem 1rem 6rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; }
   .st-key-ask_launcher { right: 1.1rem; bottom: 1.1rem; }
   .st-key-ask_panel { right: 1.1rem; bottom: 5rem; }
 }
-=======
-@media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.72rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
->>>>>>> a015a3c (commited by dna)
 /* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
 @media (max-width: 640px) {
   /* The top strip hosts Streamlit's sidebar expand control; keep page content clear of it */
   .block-container { padding: 4.55rem .85rem 6rem; }
-  .app-header { flex-wrap: wrap; align-items:flex-start; gap:.3rem; }
+  .app-header { flex-wrap: wrap; align-items:flex-start; gap:.65rem; padding:.85rem .95rem; border-radius:15px; }
   .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
+  .brand-mark::after { inset:-4px; }
   .brand-name { font-size:1.02rem; }
   .page-title { font-size:1.52rem; }
   .metric-card { padding:.9rem .85rem .85rem; min-height:116px; }
@@ -418,18 +414,19 @@ def app_header() -> None:
         <div class="app-header">
           <div class="brand">
             <div class="brand-mark">◒</div>
-            <div><div class="brand-name">InsightRwanda</div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
+            <div><div class="brand-name">Insight<span>Rwanda</span></div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
-          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> Survey data: {COMBINED_LABEL_SHORT}</div></div>
+          <div class="header-meta">
+            <div class="header-chip"><small>Survey</small><b>FinScope · 2024 &amp; 2020</b></div>
+            <div class="header-chip"><small>Scope</small><b>National coverage</b></div>
+            <div class="live-pill"><span class="live-dot"></span> Live analysis</div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-<<<<<<< HEAD
     # The AI Assistant lives in a fixed launcher rendered at the end of main(),
     # so it never consumes page space and opens without leaving this screen.
-=======
->>>>>>> a015a3c (commited by dna)
 
 
 NAV_ICONS = {
@@ -1295,92 +1292,6 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         else:
             metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
 
-    render_estimation_section(view)
-    st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology.</div>', unsafe_allow_html=True)
-
-
-def render_estimation_section(view: pd.DataFrame) -> None:
-    """Estimation layer: labelled context estimates, bootstrap intervals and the official unlock contract."""
-
-    section_head(
-        "Exploratory estimates — labelled, never official",
-        "Income-band context · bootstrap intervals are not survey-design standard errors",
-    )
-    context_cards = st.columns(3)
-    for index, (slot, estimate_id) in enumerate(zip(context_cards, CONTEXT_ESTIMATES)):
-        try:
-            result = calculate_context_estimate(view, estimate_id)
-        except ValueError:
-            result = None
-        with slot:
-            if result is None:
-                metric_card(CONTEXT_ESTIMATES[estimate_id].title, "—", "not asked on this wave", "⊘", "rose")
-            else:
-                metric_card(
-                    CONTEXT_ESTIMATES[estimate_id].title,
-                    pct(result["estimate"], 1),
-                    f"weighted population {result['weight_sum']:,.0f}",
-                    "≡" if estimate_id == "EI-02" else "≣",
-                    "orange" if estimate_id == "EI-02" else "yellow",
-                    delay=index,
-                )
-
-    band_tab, interval_tab, contract_tab = st.tabs(["Income-band detail", "Bootstrap intervals", "Official estimation contract"])
-    bands_available = "n11" in view and "n12" in view
-    with band_tab:
-        if bands_available:
-            monthly = context_weight_distribution(view, "n11").sort_values(ascending=False)
-            annual = context_weight_distribution(view, "n12").sort_values(ascending=False)
-            st.markdown('<div class="chart-card"><div class="section-title">Monthly personal income bands</div><div class="section-note">Weighted population by band · don\'t-know/refusal excluded</div>', unsafe_allow_html=True)
-            left, right = st.columns(2)
-            with left:
-                fig = go.Figure(go.Bar(y=monthly.index, x=monthly.values, orientation="h", marker_color="#de7c3f", text=[f"{v:,.0f}" for v in monthly.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
-                st.plotly_chart(chart_theme(fig, 420), width="stretch", config={"displayModeBar": False})
-            with right:
-                fig = go.Figure(go.Bar(y=annual.index, x=annual.values, orientation="h", marker_color="#8ca4f0", text=[f"{v:,.0f}" for v in annual.values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:,.0f}<extra>weighted pop</extra>"))
-                st.plotly_chart(chart_theme(fig, 420), width="stretch", config={"displayModeBar": False})
-            st.markdown('</div>', unsafe_allow_html=True)
-            caveats = " ".join(limitation for estimate_id in CONTEXT_ESTIMATES for limitation in CONTEXT_ESTIMATES[estimate_id].limitations)
-            st.markdown(f'<div class="callout"><strong>Why this is not poverty.</strong><br>These bands are self-reported and band-coded; they are neither household consumption nor a welfare aggregate. They stay financial-context statistics. {caveats}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="callout"><strong>Not available on this wave.</strong><br>The income-band questions were not asked on the chosen wave, so the band distribution is withheld rather than approximated from other questions.</div>', unsafe_allow_html=True)
-
-    with interval_tab:
-        rows = []
-        for indicator_id in INDICATORS:
-            try:
-                ci = weighted_bootstrap_ci(view, indicator_id, n_boot=300, seed=42)
-            except ValueError:
-                continue  # indicator not reproducible on this source
-            rows.append({
-                "ID": indicator_id,
-                "Indicator": INDICATORS[indicator_id].title,
-                "Point": ci.estimate,
-                "Low (95%)": ci.low,
-                "High (95%)": ci.high,
-            })
-        if rows:
-            interval_table = pd.DataFrame(rows).set_index("ID")
-            interval_table[["Point", "Low (95%)", "High (95%)"]] = interval_table[["Point", "Low (95%)", "High (95%)"]].map(lambda v: f"{v * 100:.1f}%")
-            st.dataframe(interval_table, width="stretch", height=240)
-            st.markdown(f'<div class="callout"><strong>Method.</strong><br>{BOOTSTRAP_NOTE}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="callout"><strong>Not available on this wave.</strong><br>None of the documented indicators can be computed on the chosen wave, so no intervals are shown. Nothing is imputed to fill the table.</div>', unsafe_allow_html=True)
-
-    with contract_tab:
-        status = official_poverty_status()
-        contract = pd.DataFrame(
-            [(req, "missing — estimation blocked") for req in status.missing],
-            columns=["Required input", "Status"],
-        )
-        st.dataframe(contract, hide_index=True, width="stretch", height=250)
-        preview_col, cta_col = st.columns([1, 1.4])
-        with preview_col:
-            if st.button("How can this be unlocked?", key="open_poverty_modal"):
-                official_poverty_contract_modal()
-        with cta_col:
-            st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
-
 
 def render_regional(df: pd.DataFrame) -> None:
     page_intro(
@@ -1823,31 +1734,6 @@ def _lens_view(df: pd.DataFrame, page: str) -> pd.DataFrame:
     )
 
 
-@st.dialog("Official poverty estimation — unlock contract", width="large")
-def official_poverty_contract_modal() -> None:
-    status = official_poverty_status()
-    st.markdown(
-        "<p class='section-note'>A data steward unlocks the official estimate only by supplying every "
-        "required input explicitly — nothing is inferred or defaulted. The app blocks this on purpose: "
-        "a poverty rate without a documented line, aggregate and variance method would be fabrication.</p>",
-        unsafe_allow_html=True,
-    )
-    contract = pd.DataFrame(
-        [(req, "missing — estimation blocked") for req in status.missing],
-        columns=["Required input", "Status"],
-    )
-    if status.supplied:
-        for name, value in status.supplied.items():
-            contract = pd.concat([contract, pd.DataFrame([[name, f"supplied: {value}"]], columns=contract.columns)], ignore_index=True)
-    st.dataframe(contract, hide_index=True, width="stretch")
-    st.markdown(
-        "<div class='callout'><strong>State.</strong> " + ("All six inputs supplied — estimation can run." if status.ready else f"{len(status.missing)} of 6 inputs still missing.") + "</div>",
-        unsafe_allow_html=True,
-    )
-    if st.button("Close", key="modal_close_poverty"):
-        return
-
-
 @st.dialog("Why the explorer withholds aggregates", width="large")
 def explorer_gate_modal(profile: SourceProfile) -> None:
     released = aggregate_release_allowed(profile)
@@ -2253,63 +2139,6 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         )
 
 
-@st.dialog("Brief preview — what the export contains", width="large")
-def brief_preview_modal(brief, names: dict[str, str]) -> None:
-    st.markdown(f"<div class='eyebrow'>{brief.eyebrow} · {brief.lens_note}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='section-title'>{brief.narrative}</div><p class='section-note' style='font-size:.8rem'>{brief.caution}</p>", unsafe_allow_html=True)
-    st.dataframe(
-        pd.DataFrame(brief.kpis, columns=["Value", "Figure", "Detail"]),
-        hide_index=True,
-        width="stretch",
-        height=min(460, 39 * max(len(brief.kpis), 2) + 38),
-    )
-    st.markdown(
-        "<p class='section-note'>Use the download buttons below the preview. The brief is aggregate-only: "
-        "no household records, no gated exports — safe to share with judges and partners.</p>",
-        unsafe_allow_html=True,
-    )
-    if st.button("Close", key="modal_close_brief"):
-        return
-
-
-def render_brief_export(page: str, df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
-    """One non-gated, take-away brief for this page: aggregate-only PNG + one-page PDF."""
-
-    view = _lens_view(df, page)
-    context_record = evaluate_model_workload(view) if page == "Predictive insights" else None
-    try:
-        brief = build_page_brief(page, view, profile, checks, context_record)
-    except Exception as exc:  # briefs must never break a page
-        st.warning(f"Brief export unavailable for this page: {exc}")
-        return
-    names = brief_filenames(brief)
-    pdf_bytes, png_bytes = render_brief_pdf(brief), render_brief_png(brief)
-    preview_col, pdf_col, png_col = st.columns([.9, 1.05, 1.05])
-    with preview_col:
-        if st.button("Preview first", key="open_brief_modal"):
-            brief_preview_modal(brief, names)
-    with pdf_col:
-        st.download_button(
-            "Download one-page brief (PDF)",
-            data=pdf_bytes,
-            file_name=names["pdf"],
-            mime="application/pdf",
-            width="stretch",
-        )
-    with png_col:
-        st.download_button(
-            "Download one-page brief (PNG)",
-            data=png_bytes,
-            file_name=names["png"],
-            mime="image/png",
-            width="stretch",
-        )
-    st.markdown(
-        '<div class="footer-note">The brief is built from aggregate values only — no household records, exports or edit of the source. It reflects the analysis lens currently selected above.</div>',
-        unsafe_allow_html=True,
-    )
-
-
 @st.cache_data(show_spinner="Loading the SPSS source…")
 def load_spss_workload(path: Path) -> pd.DataFrame:
     """Load + enrich the SPSS second source, cached like the master load."""
@@ -2441,7 +2270,6 @@ def main() -> None:
     elif page == "About the build":
         render_about(df)
 
-    render_brief_export(page, df, profile, checks)
     lens_toast(page, lens_signature(_lens_view(df, page), page))
     kpi_countup()
     # Floating AI Assistant — same screen, page content stays behind it.

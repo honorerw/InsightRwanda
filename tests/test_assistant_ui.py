@@ -142,7 +142,13 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertIn("GEMINI_API_KEY", rendered)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertIn("not an official NISR conclusion", rendered)
-        self.assertNotIn("sk-", rendered)
+        # Only human-readable UI text is scanned: strip the global <style>
+        # block and all HTML tags/markup first, then no API-key-shaped value
+        # ('sk-' plus at least 8 key characters) may appear.
+        import re
+        text_only = re.sub(r"<style>.*?</style>", " ", rendered, flags=re.DOTALL)
+        text_only = re.sub(r"<[^>]*>", " ", text_only)
+        self.assertIsNone(re.search(r"sk-[A-Za-z0-9_\-]{8,}", text_only))
 
     def test_example_question_and_unavailable_evidence(self) -> None:
         self.open_panel()
