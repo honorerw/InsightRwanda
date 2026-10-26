@@ -22,9 +22,9 @@ def main() -> int:
     out_dir = ROOT / "docs" / "briefs"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    raw = load_analysis_data(ROOT / "data" / "dataset.dta")
+    raw = load_analysis_data(ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta")
     data = enrich_analysis_data(raw)
-    profile = build_source_profile(ROOT / "data" / "dataset.dta", analytical_variables=94)
+    profile = build_source_profile(ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta", analytical_variables=94)
     checks = run_quality_checks(data, source_variable_count=profile.source_variables)
 
     briefs = build_all_briefs(data, profile, checks)

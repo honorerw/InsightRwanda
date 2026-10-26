@@ -2,14 +2,17 @@
 
 InsightRwanda is a Streamlit research and analytics platform for the NISR 2026 Big Data Hackathon, focused on Financial Inclusion & Poverty Reduction in Rwanda.
 
-The application is connected to **two supplied sources**: the master `data/dataset.dta` (Stata, 13,994 households) and the second source `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, 12,480 individual respondents). A sidebar selector switches between them; where the second source lacks a label-verified counterpart, the app shows explicit "not reproducible" cards instead of approximating. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
+The application is connected to **two supplied sources**: the master `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta` (Stata, 13,994 households, the FinScope 2024 wave) and the second source `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, 12,480 individual respondents, the FinScope 2020 wave). Every page analyses **one combined dataset** that pools both waves as independent samples on the harmonized measures — no sidebar source selector; where a measure lacks a label-verified counterpart on one wave, its estimate is computed on the records where it is observed and never imputed. The two files share **no record key** (0 of 12,480 SPSS keys match a master key), so they are never merged: the pool keeps the source as a dimension and reports the source gap instead of a fabricated household link. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
 
 ## What is implemented
 
 - Custom branded Streamlit sidebar and navigation with the default header, footer and toolbar hidden.
 - Real Stata loading through `research/data_pipeline.py` and second-source SPSS loading through `research/spss_pipeline.py` (label-verified alias mapping onto the master schema; `pyreadstat`).
 - A documented 94-variable analytical slice from the 2,442-variable source file.
-- A sidebar source selector with honest per-page degradation on the SPSS source and a cross-source agreement table (same indicator rules applied to both supplied files, no merging).
+- A **combined dataset** as the single analysis source with a per-page **Survey year** filter (2020 SPSS wave vs 2024 master wave), honest scope notes, and a cross-source agreement table (same indicator rules applied to both supplied files, no merging).
+- A **combined view** (`research/joint.py`): a linkage audit that measures the zero key overlap (including a chance-level check on province/district/age/sex pairs), pooled estimates for the seven shared measures with an equal-source weight, a weighted relationship matrix, and a transport check that trains the same non-leaking model within each file, across files in both directions and on the pooled frame for both shared outcomes.
+- Explicit wave/year handling: the master Stata file is supplied as the FinScope 2024 wave (release name) and the SPSS file as the FinScope 2020 wave (release and file timestamp; official fieldwork September-November 2019). `research/joint.py::WAVE_YEARS` is the single place where a documented year can be revised.
+- **One combined dataset on disk**: `python scripts/build_combined_dataset.py` writes `data/derived/insightrwanda_combined.csv` (26,474 stacked rows, 20 harmonized columns) plus a metadata manifest with both source hashes, the zero-key-linkage audit and the column dictionary. Source keys are replaced by deterministic hashed record ids; `data/derived/` is git-ignored because the rows are respondent-level records.
 - Structural data-quality checks for schema, row count, identifier uniqueness, weights, codes, geographic consistency and missingness.
 - Verified financial-inclusion indicators using embedded Stata variable labels:
   - active formal financial access;
@@ -42,7 +45,7 @@ Run the real-source test suite with:
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 52 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). It exercises the supplied Stata file
+The current test suite contains 117 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
 as well as small synthetic fixtures for invalid weights, unexpected response
 codes, duplicate identifiers, geographic inconsistencies, missing schemas,
 filtering, source errors, publication gates, bootstrap intervals, income-band
@@ -52,7 +55,7 @@ and identifier exclusion).
 
 ## Reproducibility record
 
-The supplied source is loaded read-only from `data/dataset.dta`:
+The supplied source is loaded read-only from `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta`:
 
 - rows loaded: 13,994;
 - source variables inventoried: 2,442;

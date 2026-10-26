@@ -21,7 +21,7 @@ from research.quality import run_quality_checks
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "data" / "dataset.dta"
+SOURCE = ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"
 
 
 def _fixture_profile() -> SourceProfile:
@@ -130,7 +130,7 @@ class GoldenSourceBriefTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.raw = load_analysis_data(SOURCE := cls.ROOT / "data" / "dataset.dta")
+        cls.raw = load_analysis_data(SOURCE := cls.ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta")
         cls.data = enrich_analysis_data(cls.raw)
         cls.profile = build_source_profile(SOURCE, analytical_variables=94)
         cls.checks = run_quality_checks(cls.data, source_variable_count=cls.profile.source_variables)

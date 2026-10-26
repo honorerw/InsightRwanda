@@ -43,6 +43,7 @@ def write_synthetic_sav(path: str, n: int = 40, seed: int = 5) -> None:
             "A2": float(rng.choice([11, 12, 13, 21, 31, 51])),
             "A3": float(rng.choice([1, 2])),
             "B0": float(rng.choice([1, 2])),
+            "B1": float(rng.integers(16, 90)),
             "B2": float(rng.choice([1, 2])),
             **{f"QF5_{j:02d}": float(rng.choice([1, 2, 3], p=[.45, .45, .1])) for j in range(1, 11)},
             "EF9": float(rng.choice([1, 2, 3], p=[.4, .5, .1])),

@@ -20,7 +20,7 @@ from research.quality import run_quality_checks
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "data" / "dataset.dta"
+SOURCE = ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"
 
 
 class RealSourcePipelineTests(unittest.TestCase):

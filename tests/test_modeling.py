@@ -204,7 +204,7 @@ class RealSourceModelingTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.frame = enrich_analysis_data(load_analysis_data("data/dataset.dta"))
+        cls.frame = enrich_analysis_data(load_analysis_data("data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"))
 
     def test_real_data_end_to_end_beats_random(self):
         record = train_final_model(self.frame)

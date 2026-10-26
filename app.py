@@ -17,7 +17,6 @@ from research.spss_pipeline import (
 )
 from research.data_pipeline import (
     ANALYSIS_COLUMNS as PIPELINE_COLUMNS,
-    PROVINCES,
     aggregate_weighted_measure,
     enrich_analysis_data as pipeline_enrich_analysis_data,
     filter_analysis_data as pipeline_filter_analysis_data,
@@ -48,6 +47,18 @@ from research.briefs import (
     render_brief_png,
 )
 from research.indicators import INDICATORS, calculate_by_group, calculate_indicator
+from research.joint import (
+    MEASURES,
+    SOURCE_LABELS as JOINT_SOURCE_LABELS,
+    TARGETS,
+    build_joint_frame,
+    comparison_note,
+    evaluate_transport,
+    linkage_audit,
+    pooled_estimates,
+    wave_note,
+    weighted_correlation,
+)
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import AssistantAnswer, MAX_QUESTION_LENGTH, answer_question
 from research.assistant_llm import (
@@ -58,22 +69,38 @@ from research.assistant_llm import (
 
 
 APP_DIR = Path(__file__).resolve().parent
-DATA_PATH = APP_DIR / "data" / "dataset.dta"
+DATA_PATH = APP_DIR / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"
 SPSS_PATH = APP_DIR / "data" / "Rwanda FinScope 2020_Final Data.sav"
 
-SOURCE_OPTIONS = (
-    ("master", "dataset.dta (master) · 13,994 households"),
-    ("spss", "FinScope 2020 SPSS · 12,480 respondents"),
-)
-SOURCE_LABELS = {
-    "master": "Master Stata survey · 13,994 households",
-    "spss": "FinScope 2020 survey · 12,480 respondents",
-}
-SOURCE_SOURCE_IDs = {"master": "supplied_dataset_dta", "spss": SPSS_SOURCE_ID}
+COMBINED_SOURCE_ID = "insightrwanda_combined"
+COMBINED_LABEL = "Combined dataset · FinScope 2024 (master) + FinScope 2020 (SPSS)"
+COMBINED_LABEL_SHORT = "FinScope Rwanda · 2024 & 2020 waves"
+
+# Survey-year lens. Both waves are documented by their supplied release names:
+# the master file is the FinScope 2024 wave; the SPSS file is the FinScope 2020
+# wave (fieldwork September-November 2019).
+YEAR_ALL = "All years"
+YEAR_2020 = "2020 · FinScope 2020"
+YEAR_2024 = "2024 · FinScope 2024"
+YEAR_OPTIONS = (YEAR_ALL, YEAR_2020, YEAR_2024)
+YEAR_SHORT = {YEAR_ALL: "All years", YEAR_2020: "2020 wave", YEAR_2024: "2024 wave"}
 
 
-def active_source() -> str:
-    return st.session_state.get("analysis_source", "master")
+def active_year() -> str:
+    """The sidebar's survey-year choice ('All years' before the widget renders)."""
+
+    year = st.session_state.get("survey_year", YEAR_ALL)
+    return year if year in YEAR_OPTIONS else YEAR_ALL
+
+
+def apply_year_filter(frame: pd.DataFrame, choice: str) -> pd.DataFrame:
+    """Keep records from the chosen survey wave ('All years' keeps everything)."""
+
+    if choice == YEAR_2020:
+        return frame[frame["survey_year"].eq(2020)]
+    if choice == YEAR_2024:
+        return frame[frame["survey_year"].eq(2024)]
+    return frame
 
 st.set_page_config(
     page_title="InsightRwanda | Research Analytics",
@@ -89,7 +116,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Roboto:wght@400;500;600;700&display=swap');
 :root {
     --ink: #17213d;
     --muted: #66718b;
@@ -105,7 +132,7 @@ st.markdown(
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif; color: var(--ink); }
+html, body, [class*="css"] { font-family: 'Roboto', Arial, Verdana, sans-serif; color: var(--ink); }
 body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 .stApp { background: var(--paper); }
 header[data-testid="stHeader"] { background: transparent !important; }
@@ -134,60 +161,90 @@ footer { display: none !important; }
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #123c36 0%, #1d5149 100%); border-right: 1px solid #2c6258; min-width: 276px; }
-[data-testid="stSidebar"] > div:first-child { padding: 1.1rem .95rem 1.4rem; }
-[data-testid="stSidebar"] * { color: #effaf6; }
-[data-testid="stSidebar"] hr { border-color: #397368; margin: 1rem 0; }
-.side-brand { display:flex; align-items:center; gap:.65rem; padding:.25rem .35rem .85rem; }
-.side-mark { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:11px; background:#9ce0c6; color:#123c36; font-family:'Lora', Georgia, 'Times New Roman', serif; font-weight:700; box-shadow:0 8px 22px rgba(0,0,0,.16); }
-.side-name { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.02rem; font-weight:600; letter-spacing:-.02em; }
-[data-testid="stSidebar"] .side-caption { color:#b3d8cc !important; font-size:.67rem; margin-top:.12rem; }
-[data-testid="stSidebar"] .side-label { color:#9bc5b8 !important; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.11em; font-size:.62rem; font-weight:600; margin:.95rem .35rem .45rem; }
-[data-testid="stSidebar"] .side-label:first-of-type { margin-top:.15rem; }
-[data-testid="stSidebar"] .stButton { width:100%; margin:.1rem 0; }
-[data-testid="stSidebar"] .stButton button { width:100% !important; display:flex; align-items:center; gap:.55rem; justify-content:flex-start; text-align:left; border:1px solid transparent; border-radius:10px; background:transparent; color:#c8e3da; font-size:.795rem; font-weight:600; padding:.58rem .72rem; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
-[data-testid="stSidebar"] .stButton button p { font-size:.795rem; font-weight:600; }
-[data-testid="stSidebar"] .stButton button[kind="secondary"]:hover, [data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#286358; border-color:#4c8b7d; color:#fff; }
+/* Sidebar — very light mint rail beside the white workspace, WCAG-AA contrast */
+[data-testid="stSidebar"] { background:#edf5f0; border-right:1px solid #d8e8dd; min-width:276px; }
+[data-testid="stSidebar"] > div:first-child { padding:1.15rem .9rem 1.5rem; }
+[data-testid="stSidebar"] * { color:#17213d; }
+[data-testid="stSidebar"] hr { border-color:#d8e8dd; margin:1rem 0; }
+.side-brand { display:flex; align-items:center; gap:.65rem; padding:.25rem .35rem 1rem; border-bottom:1px solid #d8e8dd; margin-bottom:.9rem; }
+.side-mark { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:11px; background:linear-gradient(145deg, #34d399, #059669); color:#fff; font-family:'Roboto', Arial, Verdana, sans-serif; font-weight:700; box-shadow:0 6px 16px rgba(5,150,105,.22); }
+.side-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:.98rem; font-weight:600; letter-spacing:-.01em; color:#17213d; }
+[data-testid="stSidebar"] .side-caption { color:#5b6f66 !important; font-size:.65rem; line-height:1.5; margin:.12rem .15rem .2rem; }
+[data-testid="stSidebar"] .side-label { color:#6b8276 !important; font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.14em; font-size:.6rem; font-weight:500; margin:1rem .35rem .45rem; padding-top:.8rem; border-top:1px solid #d8e8dd; }
+[data-testid="stSidebar"] .side-label:first-of-type { margin-top:.2rem; padding-top:0; border-top:none; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] { margin:.1rem .05rem .35rem; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label { color:#5b6f66 !important; font-size:.72rem; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div { background:#fff; border:1px solid #cfe0d5; border-radius:10px; min-height:40px; box-shadow:none; color:#17213d; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div:hover { border-color:#8fc7a8; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] svg { fill:#059669; }
+[data-testid="stSidebar"] .stButton { width:100%; margin:.12rem 0; }
+[data-testid="stSidebar"] .stButton button { width:100% !important; display:flex; align-items:center; border:1px solid transparent; border-radius:10px; background:transparent; color:#3f574d; font-size:.78rem; font-weight:600; padding:.56rem .72rem; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
+[data-testid="stSidebar"] .stButton button,
+[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] { justify-content:flex-start !important; text-align:left !important; }
+[data-testid="stSidebar"] .stButton button p { font-size:.78rem; font-weight:600; width:100% !important; margin:0 !important; text-align:left !important; justify-content:flex-start !important; }
+/* The active (primary) nav item keeps its dark-green label on the soft green pill:
+   the blanket sidebar text colour would otherwise repaint the label on top of it. */
+[data-testid="stSidebar"] .stButton button[kind="primary"],
+[data-testid="stSidebar"] .stButton button[kind="primary"] p { color:#14532d !important; }
+[data-testid="stSidebar"] .stButton button[kind="secondary"]:hover { background:#e2f0e8; border-color:#cfe0d5; color:#17213d; }
 [data-testid="stSidebar"] .stButton button[kind="secondary"]:active { transform:translateX(2px) scale(.99); }
-[data-testid="stSidebar"] .stButton button[kind="primary"] { background:#9ce0c6; border-color:#bcebd5; color:#123c36; box-shadow:0 5px 14px rgba(0,0,0,.1); }
-[data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#9ce0c6; color:#123c36; transform:translateX(3px); box-shadow:0 6px 16px rgba(0,0,0,.16); }
-.side-card { border:1px solid #397368; background:#205148; border-radius:12px; padding:.75rem .8rem; margin-top:.45rem; }
-.side-card-title { font-size:.72rem; font-weight:700; color:#effaf6 !important; }
-.side-card-copy { font-size:.67rem; line-height:1.45; color:#c0ded4 !important; margin-top:.28rem; }
-.side-status { display:flex; align-items:center; gap:.4rem; font-size:.67rem; color:#c8e3da !important; margin-top:.75rem; }
-.side-status-dot { width:7px; height:7px; border-radius:50%; background:#9ce0c6; box-shadow:0 0 0 4px rgba(156,224,198,.18); }
-.side-footer { color:#9bc5b8 !important; font-size:.63rem; line-height:1.45; margin:.95rem .35rem 0; }
+/* Active nav item: soft green pill, rounded corners, darker text */
+[data-testid="stSidebar"] .stButton button[kind="primary"] { background:#d3f1df; border-color:#bfe6cf; color:#14532d; box-shadow:0 3px 10px rgba(5,150,105,.10); }
+[data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#c3ead4; border-color:#aaddc2; color:#14532d; transform:translateX(3px); box-shadow:0 5px 14px rgba(5,150,105,.16); }
+.side-card { border:1px solid #cfe0d5; background:#f6fbf8; border-radius:12px; padding:.75rem .8rem; margin:1rem .1rem 0; }
+.side-card-title { font-size:.7rem; font-weight:700; color:#14532d !important; font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.12em; }
+.side-card-copy { font-size:.66rem; line-height:1.55; color:#5b6f66 !important; margin-top:.35rem; }
+/* Primary action pinned near the rail's bottom edge, ahead of the profile row */
+.st-key-side_actions { margin-top:1.1rem; padding-top:.85rem; border-top:1px solid #d8e8dd; }
+.st-key-side_actions .stButton { width:100%; margin:.1rem 0; }
+.st-key-side_actions .stButton button { width:100% !important; border-radius:10px; background:linear-gradient(145deg, #10b981, #059669); border:1px solid #059669; box-shadow:0 6px 16px rgba(5,150,105,.22); }
+.st-key-side_actions .stButton button,
+.st-key-side_actions .stButton button p { color:#fff !important; justify-content:center !important; text-align:center !important; font-size:.8rem; font-weight:700; padding:.6rem .75rem; }
+.st-key-side_actions .stButton button:hover { filter:brightness(1.06); box-shadow:0 8px 18px rgba(5,150,105,.3); transform:translateY(-1px); }
+/* Profile row: avatar, short info and dropdown indicator, opening an account menu */
+.st-key-side_profile { margin-top:.85rem; }
+.st-key-side_profile [data-testid="stPopover"] button { width:100%; display:flex; align-items:center; justify-content:flex-start; gap:.6rem; background:#f6fbf8; border:1px solid #cfe0d5; border-radius:12px; padding:.5rem .7rem; color:#17213d; font-size:.75rem; font-weight:600; box-shadow:none; }
+.st-key-side_profile [data-testid="stPopover"] button:hover { border-color:#8fc7a8; background:#eef7f2; }
+.st-key-side_profile [data-testid="stPopover"] [data-testid="stIconMaterial"] { color:#059669; }
+.st-key-side_profile [data-testid="stPopover"] [data-testid="stMarkdownContainer"] p { margin:0; }
+/* Filter chips: compact, removable selections under the toolbar */
+.st-key-filter_chips { display:flex; flex-wrap:wrap; align-items:center; margin:-.15rem 0 .6rem; }
+.st-key-filter_chips .stButton { margin:.15rem .2rem .15rem 0; }
+.st-key-filter_chips .stButton button { border-radius:999px; border:1px solid #c9d8ce; background:#fff; color:#2f4a3e; font-size:.7rem; font-weight:600; padding:.3rem .68rem .3rem .52rem; box-shadow:0 1px 4px rgba(23,33,61,.05); display:flex; align-items:center; gap:.18rem; }
+.st-key-filter_chips .stButton button:hover { border-color:#8fc7a8; background:#f2faf5; color:#14532d; }
+.st-key-filter_chips [data-testid="stIconMaterial"] { font-size:.85rem; }
 
 .app-header { display:flex; align-items:center; justify-content:space-between; padding: .15rem .1rem 1.15rem; border-bottom: 1px solid var(--line); margin-bottom: 1.55rem; }
 .brand { display:flex; align-items:center; gap:.75rem; }
-.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #5274e6, #172554); color:white; display:flex; align-items:center; justify-content:center; font-family:'Lora', Georgia, 'Times New Roman', serif; font-size: 1.2rem; font-weight:700; box-shadow: 0 8px 20px rgba(49,85,212,.22); }
-.brand-name { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.16rem; font-weight:600; letter-spacing:-.02em; }
-.brand-sub { color: var(--muted); font-size:.72rem; margin-top:.12rem; }
+.brand-mark { width: 42px; height: 42px; border-radius: 13px; background: linear-gradient(145deg, #34d399, #059669); color:white; display:flex; align-items:center; justify-content:center; font-family:'Roboto', Arial, Verdana, sans-serif; font-size: 1.2rem; font-weight:700; box-shadow: 0 8px 20px rgba(5,150,105,.2); }
+.brand-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.05rem; font-weight:600; letter-spacing:-.01em; }
+.brand-sub { color: var(--muted); font-size:.7rem; margin-top:.12rem; }
 .header-meta { display:flex; align-items:center; gap:.75rem; color:var(--muted); font-size:.77rem; }
 .live-pill { display:flex; align-items:center; gap:.38rem; border:1px solid #cbd5ff; color:var(--green-dark); background:#f0f3ff; border-radius:999px; padding:.4rem .72rem; font-weight:700; box-shadow:0 3px 10px rgba(49,85,212,.06); }
 .live-dot { width:7px; height:7px; background:#5274e6; border-radius:50%; box-shadow:0 0 0 4px #dbe2ff; }
 
-.eyebrow { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
+.eyebrow { font-family:'Roboto Mono','Courier New',monospace; font-size:.62rem; text-transform:uppercase; letter-spacing:.16em; color:var(--green); font-weight:500; margin: .55rem 0 .45rem; }
 .page-intro { padding: .15rem 0 .2rem; }
-.page-title { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:2.45rem; line-height:1.1; letter-spacing:-.03em; font-weight:600; margin:0; color:var(--ink); }
-.page-lede { color:var(--muted); font-size:.98rem; line-height:1.55; max-width:720px; margin:.65rem 0 1.2rem; }
-.section-title { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:600; letter-spacing:-.01em; margin:0; }
-.section-note { color:var(--muted); font-size:.77rem; margin:.25rem 0 .9rem; }
+.page-title { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:2.05rem; line-height:1.15; letter-spacing:-.015em; font-weight:600; margin:0; color:var(--ink); }
+.page-lede { color:var(--muted); font-size:.92rem; line-height:1.62; max-width:680px; margin:.6rem 0 1.15rem; }
+.section-title { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1rem; font-weight:600; letter-spacing:-.005em; margin:0; }
+.section-note { color:var(--muted); font-size:.75rem; margin:.25rem 0 .9rem; }
 .section-head { display:flex; justify-content:space-between; align-items:flex-end; margin: 1.55rem 0 .75rem; }
-.mono { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; }
+.mono { font-family:'Roboto Mono','Courier New',monospace; }
 
 .filter-shell { background:linear-gradient(135deg, #f0f3ff, #e9edfb); border:1px solid #d5dcf2; border-radius:15px; padding:.85rem 1rem .18rem; margin:.55rem 0 1.25rem; box-shadow:0 5px 18px rgba(37,56,110,.05); }
-.filter-label { font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--green-dark); font-size:.64rem; margin-bottom:.25rem; font-weight:500; }
-[data-testid="stSelectbox"] label, [data-testid="stSlider"] label { color:var(--muted); font-size:.73rem; font-weight:600; }
+.filter-label { font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.12em; color:var(--green-dark); font-size:.62rem; margin-bottom:.25rem; font-weight:500; }
+[data-testid="stSelectbox"] label, [data-testid="stSlider"] label { color:var(--muted); font-size:.72rem; font-weight:600; }
 [data-testid="stSelectbox"] > div > div { background:#fff; border-color:#d5dcef; border-radius:10px; min-height:40px; box-shadow:0 2px 8px rgba(37,56,110,.045); }
 
 .metric-card { background:var(--card); border:1px solid var(--line); border-radius:17px; padding:1.1rem 1.12rem 1rem; min-height:136px; box-shadow:0 7px 22px rgba(37,56,110,.055); transition:transform .18s ease, box-shadow .18s ease; }
 .metric-card:hover { transform:translateY(-2px); box-shadow:0 12px 28px rgba(37,56,110,.11); }
 .metric-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:.55rem; }
-.metric-label { color:var(--muted); font-size:.76rem; font-weight:600; line-height:1.25; }
+.metric-label { color:var(--muted); font-size:.73rem; font-weight:600; line-height:1.3; }
 .metric-icon { width:29px; height:29px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:.92rem; }
-.metric-value { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.84rem; letter-spacing:-.025em; font-weight:600; font-variant-numeric:tabular-nums; }
-.metric-foot { color:var(--muted); font-size:.7rem; margin-top:.25rem; line-height:1.25; }
+.metric-value { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.62rem; letter-spacing:-.01em; font-weight:600; font-variant-numeric:tabular-nums; }
+.metric-foot { color:var(--muted); font-size:.68rem; margin-top:.3rem; line-height:1.35; }
 .metric-card.green .metric-icon { background:#e8edff; color:var(--green); }
 .metric-card.green .metric-value { color:var(--green-dark); }
 .metric-card.orange .metric-icon { background:#fff0e5; color:var(--orange); }
@@ -200,14 +257,14 @@ footer { display: none !important; }
 .chart-card { background:var(--card); border:1px solid var(--line); border-radius:17px; padding:1.05rem 1.08rem .78rem; box-shadow:0 6px 22px rgba(37,56,110,.045); }
 .chart-card .stPlotlyChart { margin-top:.35rem; }
 .insight-card { border-radius:16px; padding:1.05rem 1.15rem; background:var(--green-dark); color:white; min-height:128px; }
-.insight-kicker { color:#b7c6ff; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; text-transform:uppercase; letter-spacing:.1em; font-size:.63rem; }
-.insight-text { font-family:'Lora', Georgia, 'Times New Roman', serif; font-size:1.08rem; font-weight:600; line-height:1.33; margin-top:.45rem; }
-.insight-foot { color:#d7defb; font-size:.7rem; line-height:1.35; margin-top:.55rem; }
+.insight-kicker { color:#b7c6ff; font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.14em; font-size:.6rem; }
+.insight-text { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.02rem; font-weight:600; line-height:1.38; margin-top:.45rem; }
+.insight-foot { color:#d7defb; font-size:.7rem; line-height:1.4; margin-top:.55rem; }
 
-.callout { border:1px solid #d1dafa; border-left:3px solid var(--green); background:#f0f3ff; border-radius:0 12px 12px 0; padding:.88rem 1rem; color:#354263; font-size:.84rem; line-height:1.5; }
+.callout { border:1px solid #d1dafa; border-left:3px solid var(--green); background:#f0f3ff; border-radius:0 12px 12px 0; padding:.88rem 1rem; color:#354263; font-size:.82rem; line-height:1.55; }
 .callout strong { color:var(--green-dark); }
-.tag { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#eef1fb; color:var(--green-dark); font-size:.69rem; font-weight:700; margin-right:.3rem; }
-.legend-row { display:flex; gap:1rem; flex-wrap:wrap; color:var(--muted); font-size:.72rem; margin:.2rem 0 .5rem; }
+.tag { display:inline-block; padding:.25rem .5rem; border-radius:999px; background:#eef1fb; color:var(--green-dark); font-size:.67rem; font-weight:600; margin-right:.3rem; }
+.legend-row { display:flex; gap:1rem; flex-wrap:wrap; color:var(--muted); font-size:.7rem; margin:.2rem 0 .5rem; }
 .legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:.28rem; }
 
 .profile-panel { background:#fff; border:1px solid var(--line); border-radius:16px; padding:1.15rem 1.2rem; }
@@ -215,7 +272,7 @@ footer { display: none !important; }
 .profile-name { width:148px; font-size:.76rem; color:var(--muted); }
 .profile-track { flex:1; height:9px; background:#e9edf7; border-radius:99px; overflow:hidden; }
 .profile-fill { height:100%; border-radius:99px; background:linear-gradient(90deg, #3155d4, #8ca4f0); }
-.profile-number { width:48px; text-align:right; font-family:'JetBrains Mono','DejaVu Sans Mono',monospace; font-size:.72rem; color:var(--green-dark); }
+.profile-number { width:48px; text-align:right; font-family:'Roboto Mono','Courier New',monospace; font-size:.7rem; color:var(--green-dark); }
 
 .stDataFrame { border:1px solid var(--line); border-radius:13px; overflow:hidden; box-shadow:0 4px 16px rgba(37,56,110,.035); }
 [data-testid="stDataFrame"] { background:#fff; }
@@ -223,6 +280,7 @@ div[data-testid="stExpander"] { border-color:var(--line); border-radius:12px; ba
 .download-row { display:flex; justify-content:flex-end; margin-top:.45rem; }
 button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--green-dark); font-weight:600; }
 
+<<<<<<< HEAD
 .footer-note { color:#5f6866; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
 button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
 /* InsightRwanda AI Assistant — floating launcher + in-screen panel.
@@ -278,6 +336,12 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .ask-empty-title { font-weight: 700; font-size: .82rem; color: var(--ink); }
 .ask-empty-copy { font-size: .72rem; color: var(--muted); line-height: 1.45; margin-top: .2rem; }
 .ask-intro { font-size: .74rem; color: var(--muted); margin: 0 0 .6rem; }
+=======
+.footer-note { color:#5f6866; font-size:.68rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.55; }
+button, [role="button"] { font-family:'Roboto', Arial, Verdana, sans-serif; }
+/* Ask InsightRwanda conversation surfaces */
+.ask-intro { font-size: .8rem; color: var(--muted); margin: 0 0 .6rem; }
+>>>>>>> a015a3c (commited by dna)
 .ask-q { background: var(--paper); border: 1px solid var(--line); border-radius: 10px 10px 3px 10px;
   padding: .55rem .7rem; font-size: .84rem; max-width: 92%; word-wrap: break-word; }
 .ask-switch { background: #faf6ea; border: 1px dashed #cbbf8f; border-radius: 8px; padding: .45rem .65rem;
@@ -290,12 +354,16 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="radio"]:focus-visible,
 [role="option"]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
 summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green) !important; outline-offset: 2px; }
-[data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible { outline-color: #9ce0c6 !important; }
+[data-testid="stSidebar"] button:focus-visible, [data-testid="stSidebar"] input:focus-visible, [data-testid="stSidebar"] [data-testid="stSelectbox"]:focus-within { outline-color: #059669 !important; }
 @media (max-width: 1100px) { .block-container { padding-left:1.5rem; padding-right:1.5rem; } }
+<<<<<<< HEAD
 @media (max-width: 900px) { .block-container { padding: .8rem 1rem 6rem; } .page-title { font-size:1.95rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; }
   .st-key-ask_launcher { right: 1.1rem; bottom: 1.1rem; }
   .st-key-ask_panel { right: 1.1rem; bottom: 5rem; }
 }
+=======
+@media (max-width: 900px) { .block-container { padding: .8rem 1rem 3rem; } .page-title { font-size:1.72rem; } .header-meta { display:none; } .stRadio label { padding:.42rem .48rem; font-size:.73rem; } .metric-card { min-height:122px; } }
+>>>>>>> a015a3c (commited by dna)
 /* Small-screen refinement: shared layout + Overview (phones, 360–640px) */
 @media (max-width: 640px) {
   /* The top strip hosts Streamlit's sidebar expand control; keep page content clear of it */
@@ -303,9 +371,9 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   .app-header { flex-wrap: wrap; align-items:flex-start; gap:.3rem; }
   .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
   .brand-name { font-size:1.02rem; }
-  .page-title { font-size:1.7rem; }
+  .page-title { font-size:1.52rem; }
   .metric-card { padding:.9rem .85rem .85rem; min-height:116px; }
-  .metric-value { font-size:1.5rem; }
+  .metric-value { font-size:1.38rem; }
   .metric-foot { font-size:.67rem; }
   .filter-shell { padding:.7rem .7rem .1rem; }
   .st-key-ask_launcher { right: .9rem; bottom: .9rem; }
@@ -344,7 +412,7 @@ def pct(value: float, decimals: int = 0) -> str:
 # -----------------------------------------------------------------------------
 # UI helpers
 # -----------------------------------------------------------------------------
-def app_header(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
+def app_header() -> None:
     st.markdown(
         f"""
         <div class="app-header">
@@ -352,18 +420,84 @@ def app_header(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityChe
             <div class="brand-mark">◒</div>
             <div><div class="brand-name">InsightRwanda</div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
-          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> Survey data: {SOURCE_LABELS[active_source()]}</div></div>
+          <div class="header-meta"><div class="live-pill"><span class="live-dot"></span> Survey data: {COMBINED_LABEL_SHORT}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+<<<<<<< HEAD
     # The AI Assistant lives in a fixed launcher rendered at the end of main(),
     # so it never consumes page space and opens without leaving this screen.
+=======
+>>>>>>> a015a3c (commited by dna)
 
 
-def nav(df: pd.DataFrame) -> str:
-    """Left rail as a coherent system: brand, three labelled nav groups with
-    numbered entries matching each page's own '0N /' eyebrow, then context cards."""
+NAV_ICONS = {
+    "Overview": ":material/dashboard:",
+    "Financial inclusion": ":material/account_balance:",
+    "Poverty insights": ":material/trending_down:",
+    "Geographic insights": ":material/map:",
+    "Resilience lab": ":material/shield:",
+    "Predictive insights": ":material/query_stats:",
+    "Data quality": ":material/fact_check:",
+    "Data explorer": ":material/table_view:",
+    "Methods & sources": ":material/menu_book:",
+    "About the build": ":material/info:",
+}
+
+
+def _toggle_sidebar() -> None:
+    st.session_state["sidebar_collapsed"] = not st.session_state.get("sidebar_collapsed", False)
+
+
+# Icon-only rail: labels, selectors and captions hidden, icons centred.
+COLLAPSED_SIDEBAR_CSS = """
+<style>
+[data-testid="stSidebar"] { min-width:78px !important; max-width:78px !important; }
+[data-testid="stSidebar"] > div:first-child { padding:1.15rem .5rem 1.2rem; }
+[data-testid="stSidebar"] .stButton { margin:.3rem 0; }
+[data-testid="stSidebar"] .stButton button p { display:none !important; }
+[data-testid="stSidebar"] .stButton button { justify-content:center !important; padding:.62rem .3rem; }
+[data-testid="stSidebar"] .side-caption, [data-testid="stSidebar"] .side-label, [data-testid="stSidebar"] .side-card,
+[data-testid="stSidebar"] [data-testid="stSelectbox"], .st-key-side_profile { display:none !important; }
+[data-testid="stSidebar"] .side-brand { justify-content:center; gap:0; padding-bottom:.7rem; }
+[data-testid="stSidebar"] .side-brand div:nth-child(2) { display:none; }
+</style>
+"""
+
+
+def _reset_filter(key: str, default: str) -> None:
+    st.session_state[key] = default
+
+
+@st.dialog("Account & data access")
+def account_dialog(profile: SourceProfile) -> None:
+    st.markdown(
+        """
+        **Workspace** — InsightRwanda research viewer (offline; no sign-in required).
+
+        **Role** — read-only analysis. You can filter, explore and ask questions about the evidence,
+        but the underlying survey records are never modified or exported raw.
+
+        **Where numbers come from** — see *Methods & sources* for provenance and *Data quality*
+        for the checks run before any number is shown.
+        """
+    )
+
+
+@st.dialog("Assistant history")
+def reset_assistant_dialog() -> None:
+    st.markdown("This clears the conversation history of the offline evidence assistant. Filters and page choices are kept.")
+    if st.button("Clear conversation", key="confirm_clear_ask", icon=":material/delete:", type="primary"):
+        st.session_state["ask_messages"] = []
+        st.session_state["ask_input"] = ""
+        st.rerun()
+
+
+def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> str:
+    """Left rail: brand + collapse toggle, survey-year scope, three labelled nav
+    groups with outline icons, a primary action pinned near the bottom, and the
+    profile section with its account menu."""
     nav_pages = [
         "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
         "Resilience lab", "Predictive insights", "Data quality", "Data explorer",
@@ -378,23 +512,33 @@ def nav(df: pd.DataFrame) -> str:
     current = st.session_state.get("workspace_nav", "Overview")
     if current not in nav_pages:
         current = "Overview"
-    current_source = st.session_state.get("analysis_source", "master")
     with st.sidebar:
-        st.markdown(
-            '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
-            unsafe_allow_html=True,
+        collapsed = st.session_state.get("sidebar_collapsed", False)
+        if collapsed:
+            st.markdown(COLLAPSED_SIDEBAR_CSS, unsafe_allow_html=True)
+        brand_cols = st.columns([1, .22], gap="small", vertical_alignment="center")
+        with brand_cols[0]:
+            st.markdown(
+                '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with brand_cols[1]:
+            st.button(
+                "",
+                key="sidebar_collapse",
+                icon=":material/menu_open:" if collapsed else ":material/menu:",
+                on_click=_toggle_sidebar,
+                help="Collapse or expand the sidebar",
+            )
+        st.markdown('<div class="side-label">Dataset</div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-label">Survey year</div>', unsafe_allow_html=True)
+        st.selectbox(
+            "Survey year",
+            list(YEAR_OPTIONS),
+            key="survey_year",
+            help="Choose which survey wave the whole dashboard shows: 2020, 2024, or both together.",
         )
-        st.markdown('<div class="side-label">Source</div>', unsafe_allow_html=True)
-        keys = [key for key, _label in SOURCE_OPTIONS]
-        labels = [label for _key, label in SOURCE_OPTIONS]
-        choice = st.radio(
-            "Source",
-            labels,
-            index=keys.index(current_source) if current_source in keys else 0,
-            key="analysis_source_widget",
-            label_visibility="collapsed",
-        )
-        st.session_state["analysis_source"] = keys[labels.index(choice)]
+        st.markdown('<div class="side-caption">Scopes every page — charts, tables, briefs and the assistant all follow this choice.</div>', unsafe_allow_html=True)
         for group_label, group_pages, group_hint in nav_groups:
             st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="side-caption">{group_hint}</div>', unsafe_allow_html=True)
@@ -402,6 +546,7 @@ def nav(df: pd.DataFrame) -> str:
                 pressed = st.button(
                     f"{numbers[page]} · {page}",
                     key=f"nav_{numbers[page]}",
+                    icon=NAV_ICONS[page],
                     type="primary" if page == current else "secondary",
                     width="stretch",
                 )
@@ -422,6 +567,25 @@ def nav(df: pd.DataFrame) -> str:
             "10 About the build — purpose and honesty notes</div></div>",
             unsafe_allow_html=True,
         )
+        with st.container(key="side_actions"):
+            if st.button(
+                "Ask InsightRwanda",
+                key="side_ask",
+                icon=":material/forum:",
+                type="primary",
+                width="stretch",
+                help="Ask questions about the survey evidence in simple English",
+            ):
+                ask_insightrwanda_modal(df, profile, checks)
+        with st.container(key="side_profile"):
+            with st.popover("Research viewer", icon=":material/account_circle:", width="stretch"):
+                st.caption("Offline workspace · no sign-in required")
+                if st.button("Account & data access", key="profile_account", icon=":material/badge:", width="stretch"):
+                    account_dialog(profile)
+                if st.button("Clear assistant history", key="profile_clear_ask", icon=":material/delete:", width="stretch"):
+                    reset_assistant_dialog()
+                if st.button("Go to About the build", key="profile_about", icon=":material/info:", width="stretch"):
+                    st.session_state["workspace_nav"] = "About the build"
     return current
 
 
@@ -430,15 +594,10 @@ def page_intro(eyebrow: str, title: str, lede: str) -> None:
 
 
 def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
-    st.markdown('<div class="filter-shell"><div class="filter-label">Narrow the results</div><div class="section-note" style="margin:-.15rem 0 .45rem">Pick one area or group of people; every chart on this page updates to match.</div>', unsafe_allow_html=True)
-    # Keys are scoped per source so a source switch never leaves a stale value stuck.
-    tag = active_source()
-    if tag == "master":
-        sk = key_prefix
-    else:
-        sk = f"{key_prefix}_{tag}"
+    st.markdown('<div class="filter-shell"><div class="filter-label">Narrow the results</div><div class="section-note" style="margin:-.15rem 0 .45rem">Pick one area or group of people; every chart on this page updates to match. The survey year is chosen in the left sidebar and applies everywhere.</div>', unsafe_allow_html=True)
+    sk = key_prefix
     c1, c2, c3, c4 = st.columns([1.05, 1.2, .9, .9])
-    province_options = ["All provinces"] + sorted(PROVINCES.values())
+    province_options = ["All provinces"] + sorted(df["province"].dropna().unique().tolist())
     province = c1.selectbox("Province", province_options, key=f"{sk}_province")
     pre = df if province == "All provinces" else df[df["province"].eq(province)]
     district_options = ["All districts"] + sorted(pre["district"].dropna().unique().tolist())
@@ -451,6 +610,41 @@ def filter_bar(df: pd.DataFrame, key_prefix: str = "main") -> pd.DataFrame:
         setting=None if setting == "All settings" else setting,
         respondent_sex=None if sex == "All respondents" else sex,
     )
+    defaults = {
+        f"{sk}_province": "All provinces",
+        f"{sk}_district": "All districts",
+        f"{sk}_setting": "All settings",
+        f"{sk}_sex": "All respondents",
+    }
+    chips = []
+    if province != defaults[f"{sk}_province"]:
+        chips.append(("Province", province, f"{sk}_province"))
+    if district != defaults[f"{sk}_district"]:
+        chips.append(("District", district, f"{sk}_district"))
+    if setting != defaults[f"{sk}_setting"]:
+        chips.append(("Setting", setting, f"{sk}_setting"))
+    if sex != defaults[f"{sk}_sex"]:
+        chips.append(("Respondent", sex, f"{sk}_sex"))
+    if chips:
+        with st.container(key="filter_chips"):
+            chip_cols = st.columns(len(chips) + 1, gap="small")
+            for index, (chip_label, chip_value, chip_key) in enumerate(chips):
+                with chip_cols[index]:
+                    st.button(
+                        f"{chip_label}: {chip_value}",
+                        key=f"{sk}_chip_{index}",
+                        icon=":material/close:",
+                        on_click=_reset_filter,
+                        args=(chip_key, defaults[chip_key]),
+                        help="Remove this filter",
+                    )
+            with chip_cols[-1]:
+                st.button(
+                    "Clear all filters",
+                    key=f"{sk}_chip_clear",
+                    icon=":material/filter_alt_off:",
+                    on_click=lambda keys=chips: [_reset_filter(key, defaults[key]) for _label, _v, key in keys],
+                )
     st.markdown('</div>', unsafe_allow_html=True)
     return filtered
 
@@ -459,7 +653,7 @@ def has_data(frame: pd.DataFrame) -> bool:
     if frame.empty:
         st.warning(
             "No records match the filters you chose.\n\n"
-            "Widen one filter at a time: set **Province** back to *All provinces*, "
+            "Widen one filter at a time: set **Survey year** (left sidebar) back to *All years* and **Province** back to *All provinces*, "
             "then adjust **District**, **Setting** and **Respondent sex** until records appear."
         )
         return False
@@ -484,10 +678,10 @@ def chart_theme(fig: go.Figure, height: int = 300, legend: bool = False) -> go.F
         margin=dict(l=4, r=8, t=12, b=8),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, Arial, sans-serif", color="#66718b", size=11),
+        font=dict(family="Roboto, Arial, Verdana, sans-serif", color="#66718b", size=11),
         showlegend=legend,
         legend=dict(orientation="h", y=1.12, x=0),
-        hoverlabel=dict(bgcolor="#17213d", font_size=12, font_family="Inter"),
+        hoverlabel=dict(bgcolor="#17213d", font_size=12, font_family="Roboto"),
     )
     fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#dce3ef", tickfont=dict(size=10))
     fig.update_yaxes(showgrid=True, gridcolor="#e8ecf5", zeroline=False, linecolor="rgba(0,0,0,0)", tickfont=dict(size=10))
@@ -515,12 +709,16 @@ def weighted_distribution(frame: pd.DataFrame, category: str) -> pd.Series:
     return frame.loc[valid].groupby(category)["hh_wt"].sum()
 
 
-def data_footer(frame: pd.DataFrame, label: str = "Filtered view") -> None:
-    source_name = SOURCE_SOURCE_IDs.get(active_source(), "unknown")
-    st.markdown(
-        f'<div class="footer-note"><strong>{label}:</strong> {len(frame):,} records in this view · estimates are weighted with the survey\'s household weight so larger areas and groups count their fair share · survey data: <strong>{SOURCE_LABELS[active_source()]}</strong> <span class="mono">({source_name})</span>. These figures describe what the data shows; they do not prove that one thing causes another.</div>',
-        unsafe_allow_html=True,
-    )
+def band_flag(frame: pd.DataFrame, band: str) -> pd.Series:
+    """0/1 flag for a resilience band over scored rows only.
+
+    Rows whose band is missing or 'Unknown' (any lens component unobserved —
+    the SPSS wave carries only one of the four) are excluded from the
+    denominator instead of being counted as not-in-band.
+    """
+
+    values = frame["resilience_band"]
+    return values.eq(band).astype(float).mask(values.isna() | values.eq("Unknown"))
 
 
 # -----------------------------------------------------------------------------
@@ -700,8 +898,9 @@ def render_predictive_insights(df: pd.DataFrame) -> None:
     if not has_data(view):
         return
     if "resilience_band" not in view:
-        st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>The predictive workflow trains against the resilience band, and three of its four lens components (own money, saving behaviour, social support) have no label-verified counterpart on this source. Load the master Stata source to run the model readout; nothing is imputed here.</div>', unsafe_allow_html=True)
-        data_footer(view)
+        st.markdown('<div class="callout"><strong>Not available on this wave.</strong><br>The predictive workflow trains against the resilience band, and the chosen wave does not include own-money, saving-behaviour or social-support answers. Choose the 2024 survey year in the left sidebar to run the model; nothing is imputed here.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-note">The combined section below uses only outcomes that exist on both supplied files, so it runs whichever source is active.</div>', unsafe_allow_html=True)
+        render_combined_prediction()
         return
 
     render_model_evaluation_tab(view)
@@ -711,7 +910,29 @@ def render_predictive_insights(df: pd.DataFrame) -> None:
 
     render_threshold_tradeoff(view, record)
     render_subgroup_performance(view, record)
-    data_footer(view)
+    render_combined_prediction()
+
+
+@st.dialog("Measure detail", width="large")
+def measure_detail_dialog(view: pd.DataFrame, measure: str, label: str) -> None:
+    """Click-through from a summary card: the measure broken down by province."""
+    overall = weighted_rate(view, view[measure])
+    st.markdown(f"**{label}: {pct(overall, 1)}** across the current lens.")
+    breakdown = weighted_group(view, "province", measure)
+    if breakdown.empty:
+        st.info("No records match this measure in the current lens. Widen the filters and try again.")
+        return
+    st.dataframe(
+        breakdown.assign(share=breakdown["value"].map(lambda v: pct(v, 1)))[["group", "share", "numerator_n", "denominator_n"]]
+        .rename(columns={"group": "Province", "share": "Share", "numerator_n": "Yes (n)", "denominator_n": "Scored (n)"}),
+        hide_index=True,
+        width="stretch",
+        height=min(420, 70 + 35 * len(breakdown)),
+    )
+    fig = go.Figure(go.Bar(x=breakdown["group"], y=breakdown["value"] * 100, marker_color="#3155d4", text=[f"{v * 100:.0f}%" for v in breakdown["value"]], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+    fig.update_xaxes(tickangle=-30)
+    fig.update_yaxes(range=[0, 108], ticksuffix="%")
+    st.plotly_chart(chart_theme(fig, 290), width="stretch", config={"displayModeBar": False})
 
 
 def render_overview(df: pd.DataFrame) -> None:
@@ -727,55 +948,77 @@ def render_overview(df: pd.DataFrame) -> None:
     mobile = weighted_rate(view, view["mobile_money"])
     emergency = weighted_rate(view, view["emergency_fund"])
     pressure = weighted_rate(view, view["income_pressure"])
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: metric_card("Active formal access", pct(active), "Use a bank, SACCO or mobile-money service today · shows how far formal finance reaches", "↗", "green")
-    with m2: metric_card("Mobile money", pct(mobile), "Send or receive money by phone · shows today's main digital money route", "⌁", "green", delay=1)
-    with m3: metric_card("Emergency buffer", pct(emergency), "Have money saved for a surprise expense · shows who can absorb a shock without borrowing", "◌", "yellow", delay=2)
-    with m4: metric_card("Income pressure", pct(pressure), "Income does not cover monthly living costs · shows who is under day-to-day strain", "!", "rose", delay=3)
-    st.markdown('<div class="legend-row">Card icons: <strong>↗</strong> access · <strong>⌁</strong> digital money · <strong>◌</strong> financial buffer · <strong>!</strong> watch-out</div>', unsafe_allow_html=True)
 
-    overview_tabs = st.tabs(["National signal", "Opportunity map"])
-    with overview_tabs[0]:
-        section_head("The national signal, at a glance", "Weighted household estimates · use the hover state to inspect exact values")
-        left, right = st.columns([1.25, .75])
-        with left:
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Access is broad; buffers are thinner</div><div class="section-note">Share of respondents meeting each indicator</div>', unsafe_allow_html=True)
-            labels_available = [("Active formal access", "active_access"), ("Mobile money", "mobile_money"), ("Own money", "owns_money"), ("Saves", "saves_regularly"), ("Emergency fund", "emergency_fund"), ("Internet access", "internet_access")]
-            labels_available = [(label, m) for label, m in labels_available if m in view]
-            labels = [label for label, _m in labels_available]
-            measures = [m for _label, m in labels_available]
-            values = [weighted_rate(view, view[m]) * 100 for m in measures]
-            colors = ["#3155d4", "#5274e6", "#8ca4f0", "#c5d1fb", "#e5ae2f", "#de7c3f"]
-            fig = go.Figure(go.Bar(x=values, y=labels, orientation="h", marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
-            fig.update_xaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5", title="Share of respondents", title_font=dict(size=10, color="#66718b"))
+    # --- Summary cards: four equal statistic cards, each clickable to a detail view ---
+    kpi_cards = [
+        ("Active formal access", "active_access", pct(active), "Use a bank, SACCO or mobile-money service today · shows how far formal finance reaches", "↗", "green", 0),
+        ("Mobile money", "mobile_money", pct(mobile), "Send or receive money by phone · shows today's main digital money route", "⌁", "green", 1),
+        ("Emergency buffer", "emergency_fund", pct(emergency), "Have money saved for a surprise expense · shows who can absorb a shock without borrowing", "◌", "yellow", 2),
+        ("Income pressure", "income_pressure", pct(pressure), "Income does not cover monthly living costs · shows who is under day-to-day strain", "!", "rose", 3),
+    ]
+    kpi_cols = st.columns(4)
+    for col, (label, measure, value, foot, icon, color, delay) in zip(kpi_cols, kpi_cards):
+        with col:
+            metric_card(label, value, foot, icon, color, delay=delay)
+            if st.button("Open detail", key=f"overview_detail_{measure}", icon=":material/arrow_outward:", width="stretch"):
+                measure_detail_dialog(view, measure, label)
+    st.markdown('<div class="legend-row">Each summary card opens a province detail view.</div>', unsafe_allow_html=True)
+
+    # --- Chart row: vertical bar (left) and horizontal stacked bar (right) ---
+    section_head("The national signal, at a glance", "Hover any bar or segment for exact values")
+    left, right = st.columns(2)
+    with left:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Access is broad; buffers are thinner</div><div class="section-note">Share of respondents meeting each indicator</div>', unsafe_allow_html=True)
+        labels_available = [("Active formal access", "active_access"), ("Mobile money", "mobile_money"), ("Own money", "owns_money"), ("Saves", "saves_regularly"), ("Emergency fund", "emergency_fund"), ("Internet access", "internet_access")]
+        labels_available = [(label, m) for label, m in labels_available if m in view]
+        labels = [label for label, _m in labels_available]
+        measures = [m for _label, m in labels_available]
+        values = [weighted_rate(view, view[m]) * 100 for m in measures]
+        colors = ["#3155d4", "#0ea5e9", "#06b6d4", "#14b8a6", "#22c55e", "#16a34a"]
+        fig = go.Figure(go.Bar(x=labels, y=values, marker_color=colors, text=[f"{x:.0f}%" for x in values], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+        fig.update_xaxes(tickangle=-28)
+        fig.update_yaxes(range=[0, 108], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5", title="Share of respondents", title_font=dict(size=10, color="#66718b"))
+        st.plotly_chart(chart_theme(fig, 340), width="stretch", config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+    with right:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        if "resilience_band" not in view or not view["resilience_band"].isin(["Resilient", "Watch", "Priority"]).any():
+            st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">This view needs household resilience answers that the chosen wave does not include, so the mix is withheld rather than approximated.</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="section-title">Resilience mix by setting</div><div class="section-note">Share of scored households in each band, urban vs rural</div>', unsafe_allow_html=True)
+            band_order = ["Resilient", "Watch", "Priority"]
+            band_colors = ["#3155d4", "#06b6d4", "#22c55e"]
+            scored = view.loc[view["resilience_band"].isin(band_order)]
+            settings_order = [s for s in ["Urban", "Rural"] if s in scored["setting"].dropna().unique()]
+            fig = go.Figure()
+            for band, color in zip(band_order, band_colors):
+                xs, texts = [], []
+                for setting in settings_order:
+                    sub = scored.loc[scored["setting"].eq(setting)]
+                    dist = weighted_distribution(sub, "resilience_band").reindex(band_order).fillna(0)
+                    share = dist.sum() / sub["hh_wt"].sum() * 100 if sub["hh_wt"].sum() > 0 else 0.0
+                    xs.append(share)
+                    texts.append(f"{share:.0f}%" if share >= 9 else "")
+                fig.add_trace(go.Bar(y=settings_order, x=xs, orientation="h", name=band, marker_color=color, text=texts, textposition="inside", insidetextanchor="middle", textfont=dict(color="#fff", size=11), hovertemplate="%{x:.1f}%<extra>" + band + "</extra>"))
+            fig.update_layout(barmode="stack")
+            fig.update_xaxes(range=[0, 100], ticksuffix="%", showgrid=True, gridcolor="#e8ecf5", title="Share of scored households", title_font=dict(size=10, color="#66718b"))
             fig.update_yaxes(autorange="reversed")
-            st.plotly_chart(chart_theme(fig, 328), width="stretch", config={"displayModeBar": False})
-            st.markdown('</div>', unsafe_allow_html=True)
-        with right:
-            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-            if "resilience_band" not in view:
-                st.markdown('<div class="section-title">Household resilience mix</div><div class="section-note">Not reproducible on this source: three of the four resilience-lens capabilities have no counterpart here. The mix is withheld rather than approximated.</div>', unsafe_allow_html=True)
-            else:
-                band_counts = weighted_distribution(view, "resilience_band").reindex(["Resilient", "Watch", "Priority"]).fillna(0)
-                fig = go.Figure(go.Pie(labels=band_counts.index, values=band_counts.values, hole=.68, marker=dict(colors=["#3155d4", "#e5ae2f", "#d95362"], line=dict(color="#fff", width=3)), textinfo="none", hovertemplate="%{label}: %{percent}<extra></extra>"))
-                resilient_flag = view["resilience_band"].eq("Resilient").astype(float).mask(view["resilience_band"].eq("Unknown"))
-                fig.add_annotation(text=f"{pct(weighted_rate(view, resilient_flag))}<br><span style='font-size:10px;color:#66718b'>resilient</span>", x=.5, y=.5, showarrow=False, font=dict(size=20, color="#17213d", family="Lora, Georgia, serif"))
-                st.plotly_chart(chart_theme(fig, 228), width="stretch", config={"displayModeBar": False})
-                st.markdown('<div class="legend-row"><span><span class="legend-dot" style="background:#3155d4"></span>Resilient</span><span><span class="legend-dot" style="background:#e5ae2f"></span>Watch</span><span><span class="legend-dot" style="background:#d95362"></span>Priority</span></div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.plotly_chart(chart_theme(fig, 296, legend=True), width="stretch", config={"displayModeBar": False})
+            resilient_flag = band_flag(view, "Resilient")
+            st.markdown(f'<div class="legend-row">Nationally in this lens, <strong>{pct(weighted_rate(view, resilient_flag))}</strong> of scored households sit in the Resilient band.</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    with overview_tabs[1]:
-        section_head("The opportunity map", "A first read for policy and programme teams")
-        a, b, c = st.columns(3)
-        with a:
-            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 01 · access</div><div class="insight-text">{pct(mobile)} use mobile money today.</div><div class="insight-foot">Mobile money is the clearest delivery rail for reaching households already inside the formal ecosystem.</div></div>', unsafe_allow_html=True)
-        with b:
-            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 02 · resilience</div><div class="insight-text">{pct(1 - emergency)} report no emergency fund.</div><div class="insight-foot">The inclusion gap is not only account ownership; it is the ability to absorb a shock without selling assets or borrowing.</div></div>', unsafe_allow_html=True)
-        with c:
-            st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
+    # --- Below the fold: the opportunity map ---
+    section_head("The opportunity map", "A first read for policy and programme teams")
+    a, b, c = st.columns(3)
+    with a:
+        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 01 · access</div><div class="insight-text">{pct(mobile)} use mobile money today.</div><div class="insight-foot">Mobile money is the clearest delivery rail for reaching households already inside the formal ecosystem.</div></div>', unsafe_allow_html=True)
+    with b:
+        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 02 · resilience</div><div class="insight-text">{pct(1 - emergency)} report no emergency fund.</div><div class="insight-foot">The inclusion gap is not only account ownership; it is the ability to absorb a shock without selling assets or borrowing.</div></div>', unsafe_allow_html=True)
+    with c:
+        st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
 
-    data_footer(view)
 
 
 def _indicator_results(view: pd.DataFrame) -> dict[str, object | None]:
@@ -793,16 +1036,15 @@ def _indicator_results(view: pd.DataFrame) -> dict[str, object | None]:
 def render_cross_source_agreement() -> None:
     """Honest agreement view between the two supplied sources (cached loads)."""
 
-    with st.expander("Cross-source agreement — dataset.dta (master) vs FinScope 2020 SPSS", expanded=False):
+    with st.expander("How the 2024 and 2020 waves compare", expanded=False):
         st.caption(
-            "Both supplied sources are loaded through their own pipelines and the shared indicator rules are "
-            "applied to each. Differences can be real (different survey questions, filters and row units) — "
-            "this table reports agreement, it does not merge the sources."
+            "The same indicator rules are applied to each wave separately. This table reports "
+            "agreement between the waves — it does not merge them."
         )
         rows = []
         for indicator_id in INDICATORS:
             row = {"ID": indicator_id, "Indicator": INDICATORS[indicator_id].title}
-            for tag, frame in (("master", load_master_frame()), ("spss", load_spss_workload(SPSS_PATH))):
+            for tag, frame in (("2024 wave", load_master_frame()), ("2020 wave", load_spss_workload(SPSS_PATH))):
                 try:
                     result = calculate_indicator(frame, indicator_id)
                     row[tag] = pct(result.estimate, 2)
@@ -811,10 +1053,10 @@ def render_cross_source_agreement() -> None:
             rows.append(row)
         agreement = pd.DataFrame(rows)
         agreement["Both present"] = agreement.apply(
-            lambda r: r["master"] not in ("not reproducible",) and r["spss"] not in ("not reproducible",), axis=1
+            lambda r: r["2024 wave"] not in ("not reproducible",) and r["2020 wave"] not in ("not reproducible",), axis=1
         )
         st.dataframe(agreement, hide_index=True, width="stretch", height=260)
-        st.caption("Row unit differs between sources (household vs individual). Weights differ. Treat large gaps as source-definition findings, not as errors.")
+        st.caption("The two waves asked different people slightly different questions — treat large gaps as differences between the surveys, not as errors.")
 
 
 @st.cache_data(show_spinner=False)
@@ -822,6 +1064,127 @@ def load_master_frame(path: Path = DATA_PATH) -> pd.DataFrame:
     """Cached master frame for cross-source comparisons."""
 
     return pipeline_enrich_analysis_data(pipeline_load_analysis_data(path))
+
+
+# -----------------------------------------------------------------------------
+# Combined view (both supplied sources, pooled as independent samples)
+# -----------------------------------------------------------------------------
+@st.cache_data(show_spinner="Pooling the two supplied sources…")
+def joint_workload() -> tuple[pd.DataFrame, dict[str, object]]:
+    """Build the pooled frame once and audit whether the files could be joined."""
+
+    master = load_master_frame()
+    spss = load_spss_workload(SPSS_PATH)
+    return build_joint_frame(master, spss), linkage_audit(master, spss).to_dict()
+
+
+@st.cache_data(show_spinner="Training the combined model…")
+def transport_workload(target: str) -> pd.DataFrame:
+    """Within-source, cross-source and pooled scores for one target."""
+
+    joint, _audit = joint_workload()
+    return evaluate_transport(joint, target)
+
+
+def render_combined_relationships() -> None:
+    """Pooled estimates, the source gap and the relationship matrix."""
+
+    section_head(
+        "Combined view — both waves together",
+        "The same measures, computed on each wave and pooled as independent samples",
+    )
+    joint, _audit = joint_workload()
+    st.markdown(
+        '<div class="callout"><strong>Why this is pooled, not merged.</strong> '
+        'The two waves surveyed different households and share no record keys, so they are '
+        'analysed side by side — never joined.</div>',
+        unsafe_allow_html=True,
+    )
+
+    master_label, spss_label = "2024 wave", "2020 wave"
+    estimates = pooled_estimates(joint)
+    c1, c2, c3 = st.columns(3)
+    with c1: metric_card("Pooled records", f"{len(joint):,}", "the 2024 and 2020 waves combined", "∑", "green")
+    with c2: metric_card("Shared measures", f"{len(MEASURES)}", "asked on both waves", "≡", "green", delay=1)
+    with c3:
+        mobile = float(estimates.loc[estimates["Measure"].eq(MEASURES["mobile_money"]), "Pooled (equal source weight)"].iloc[0])
+        metric_card("Mobile money, pooled", pct(mobile), "both waves, equal weight", "⌁", "green", delay=2)
+
+    left, right = st.columns([1.15, .85])
+    with left:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Each measure, side by side</div><div class="section-note">Weighted share · the gap is the 2020 wave minus the 2024 wave</div>', unsafe_allow_html=True)
+        display = estimates.copy()
+        display = display.rename(columns={JOINT_SOURCE_LABELS["master"]: master_label, JOINT_SOURCE_LABELS["spss"]: spss_label, "master n": "2024 wave n", "spss n": "2020 wave n"})
+        for column in (master_label, spss_label, "Pooled (equal source weight)"):
+            display[column] = display[column].map(lambda value: pct(value, 1))
+        display["Gap (pp)"] = display["Gap (pp)"].map(lambda value: f"{value:+.1f}" if pd.notna(value) else "—")
+        st.dataframe(display, hide_index=True, width="stretch", height=300)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with right:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        matrix = weighted_correlation(joint)
+        labels = [MEASURES[column] for column in matrix.columns]
+        st.markdown('<div class="section-title">How the measures move together</div><div class="section-note">Weighted Pearson correlation · both sources pooled</div>', unsafe_allow_html=True)
+        fig = go.Figure(go.Heatmap(
+            z=matrix.to_numpy(), x=labels, y=labels, zmin=-1, zmax=1,
+            colorscale=[[0, "#d95362"], [.5, "#f5f7fb"], [1, "#3155d4"]],
+            text=[[f"{value:+.2f}" for value in row] for row in matrix.to_numpy()],
+            texttemplate="%{text}", textfont=dict(size=9),
+            hovertemplate="%{y} × %{x}: %{z:+.2f}<extra></extra>",
+            colorbar=dict(thickness=8, len=.7, tickfont=dict(size=9)),
+        ))
+        fig.update_yaxes(autorange="reversed")
+        st.plotly_chart(chart_theme(fig, 300), width="stretch", config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div class="footer-note"><strong>What a combined view can claim.</strong> {comparison_note()} '
+        'Pooled figures give each supplied file equal total weight, so the larger file does not dominate. '
+        'These are descriptive estimates; no survey-design standard error is available because the supplied '
+        'materials include no strata/variance documentation.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_combined_prediction() -> None:
+    """Same non-leaking model, trained within and across both sources."""
+
+    section_head(
+        "One model, both sources — does prediction transfer?",
+        "Trained on each file, then tested on the other and on both together",
+    )
+    target = st.selectbox(
+        "Outcome to predict",
+        list(TARGETS),
+        format_func=lambda key: TARGETS[key],
+        key="combined_target",
+    )
+    table = transport_workload(target)
+    st.dataframe(
+        table.drop(columns=["Note"]),
+        hide_index=True,
+        width="stretch",
+        height=280,
+        column_config={
+            "Observed positive share": st.column_config.NumberColumn("Observed %", format="%.1f"),
+            "Mean predicted": st.column_config.NumberColumn("Predicted %", format="%.1f"),
+            "ROC-AUC": st.column_config.NumberColumn("ROC-AUC", format="%.3f"),
+            "Brier": st.column_config.NumberColumn("Brier", format="%.3f"),
+            "Base-rate Brier": st.column_config.NumberColumn("Base-rate Brier", format="%.3f"),
+        },
+    )
+    st.markdown(
+        '<div class="footer-note"><strong>How to read it.</strong> ROC-AUC asks whether the ranking '
+        'transfers; Brier asks whether the probability level transfers, and the base-rate column is what '
+        'a constant predictor would score. Both outcomes are highly prevalent (about 90–96% of asked '
+        'respondents), so accuracy or F1 at a fixed cut-off would only restate the base rate and are '
+        'deliberately not shown. Features are demographics, household size, internet access, income '
+        'pressure and emergency funds; no channel that helps define the outcome is ever used. A modest '
+        'AUC is the honest result here — it is not evidence that access can be targeted from these fields '
+        'alone.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None:
@@ -841,7 +1204,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         result = results[indicator_id]
         with slot:
             if result is None:
-                metric_card(INDICATORS[indicator_id].title, "—", "not reproducible on this source", "⊘", "rose", delay=index)
+                metric_card(INDICATORS[indicator_id].title, "—", "not asked on this wave", "⊘", "rose", delay=index)
             else:
                 metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color, delay=index)
 
@@ -865,13 +1228,13 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
         if result is None:
             missing_vars = ", ".join(INDICATORS[selected].source_variables)
             st.markdown(
-                f'<div class="chart-card"><div class="eyebrow">{selected} · indicator card</div><div class="section-title" style="font-size:1.18rem">{INDICATORS[selected].title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{INDICATORS[selected].definition}</p><div class="callout"><strong>Not reproducible on the active source.</strong> No variable on this source carries the label-verified semantics of the documented source variable(s) <code>{missing_vars}</code>. This is a documented scope reduction: the estimate is withheld rather than approximated or imputed.</div></div>',
+                f'<div class="chart-card"><div class="eyebrow">{selected} · indicator card</div><div class="section-title" style="font-size:1.08rem">{INDICATORS[selected].title}</div><p class="section-note" style="font-size:.8rem;line-height:1.5">{INDICATORS[selected].definition}</p><div class="callout"><strong>Not available on this wave.</strong> The survey questions this indicator needs were not asked here, so the estimate is withheld rather than approximated or imputed.</div></div>',
                 unsafe_allow_html=True,
             )
         else:
             definition = result.definition
             st.markdown(
-                f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.18rem">{definition.title}</div><p class="section-note" style="font-size:.84rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
+                f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.08rem">{definition.title}</div><p class="section-note" style="font-size:.8rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -894,6 +1257,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
     if chart_is_empty:
         st.markdown('<div class="footer-note">The active source cannot support any of the six documented indicators; the chart region above is intentionally empty rather than approximated.</div>', unsafe_allow_html=True)
     render_cross_source_agreement()
+    render_combined_relationships()
 
 
 def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
@@ -922,17 +1286,17 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
     a, b = st.columns(2)
     with a:
         if pressure is None:
-            metric_card("Income pressure", "—", "not reproducible on this source", "⊘", "rose")
+            metric_card("Income pressure", "—", "not asked on this wave", "⊘", "rose")
         else:
             metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
     with b:
         if difficulty is None:
-            metric_card("Emergency money is difficult", "—", "not reproducible on this source", "⊘", "rose", delay=1)
+            metric_card("Emergency money is difficult", "—", "not asked on this wave", "⊘", "rose", delay=1)
         else:
             metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
 
     render_estimation_section(view)
-    st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology. Source: supplied Stata dataset; release period not documented.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="footer-note">These context estimates should not be relabelled as poverty, poverty risk, or welfare status without a documented methodology.</div>', unsafe_allow_html=True)
 
 
 def render_estimation_section(view: pd.DataFrame) -> None:
@@ -940,7 +1304,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
 
     section_head(
         "Exploratory estimates — labelled, never official",
-        "Income-band context from the embedded Stata band labels · bootstrap intervals are NOT survey-design standard errors",
+        "Income-band context · bootstrap intervals are not survey-design standard errors",
     )
     context_cards = st.columns(3)
     for index, (slot, estimate_id) in enumerate(zip(context_cards, CONTEXT_ESTIMATES)):
@@ -950,7 +1314,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             result = None
         with slot:
             if result is None:
-                metric_card(CONTEXT_ESTIMATES[estimate_id].title, "—", "not reproducible on this source", "⊘", "rose")
+                metric_card(CONTEXT_ESTIMATES[estimate_id].title, "—", "not asked on this wave", "⊘", "rose")
             else:
                 metric_card(
                     CONTEXT_ESTIMATES[estimate_id].title,
@@ -979,7 +1343,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             caveats = " ".join(limitation for estimate_id in CONTEXT_ESTIMATES for limitation in CONTEXT_ESTIMATES[estimate_id].limitations)
             st.markdown(f'<div class="callout"><strong>Why this is not poverty.</strong><br>These bands are self-reported and band-coded; they are neither household consumption nor a welfare aggregate. They stay financial-context statistics. {caveats}</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>The label-verified income-band variables (n11, n12) have no counterpart on this source, so the band distribution is withheld rather than approximated from other questions.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="callout"><strong>Not available on this wave.</strong><br>The income-band questions were not asked on the chosen wave, so the band distribution is withheld rather than approximated from other questions.</div>', unsafe_allow_html=True)
 
     with interval_tab:
         rows = []
@@ -1001,7 +1365,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             st.dataframe(interval_table, width="stretch", height=240)
             st.markdown(f'<div class="callout"><strong>Method.</strong><br>{BOOTSTRAP_NOTE}</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="callout"><strong>Not reproducible on the active source.</strong><br>None of the documented indicators can be computed here, so no intervals are shown. Nothing is imputed to fill the table.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="callout"><strong>Not available on this wave.</strong><br>None of the documented indicators can be computed on the chosen wave, so no intervals are shown. Nothing is imputed to fill the table.</div>', unsafe_allow_html=True)
 
     with contract_tab:
         status = official_poverty_status()
@@ -1015,7 +1379,7 @@ def render_estimation_section(view: pd.DataFrame) -> None:
             if st.button("How can this be unlocked?", key="open_poverty_modal"):
                 official_poverty_contract_modal()
         with cta_col:
-            st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly in <span class="mono">research/estimation.py::official_poverty_status</span> by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="callout"><strong>Unlock rule.</strong><br>An official poverty estimation runs only when every input above is supplied explicitly by an authorised data steward. Nothing is inferred or defaulted.</div>', unsafe_allow_html=True)
 
 
 def render_regional(df: pd.DataFrame) -> None:
@@ -1092,18 +1456,17 @@ def render_regional(df: pd.DataFrame) -> None:
             st.markdown('<div class="chart-card">', unsafe_allow_html=True)
             if "resilience_band" in view:
                 dview = view[view["district"].eq(drill_target)]
-                setting_split = weighted_group(dview.assign(priority=dview["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
+                setting_split = weighted_group(dview.assign(priority=band_flag(dview, "Priority")), "setting", "priority")
                 fig = go.Figure(go.Bar(x=setting_split["group"], y=setting_split["value"] * 100, marker_color=["#d95362" if s == "Rural" else "#f0a1ad" for s in setting_split["group"]], text=[f"{v:.0f}%" for v in setting_split["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
                 fig.update_yaxes(range=[0, max(30, float(setting_split["value"].max() * 100 + 10))], ticksuffix="%") if len(setting_split) else None
                 st.markdown(f'<div class="section-title">{drill_target}: where does the priority share sit?</div><div class="section-note">Resilience Priority band share by urban / rural setting inside this district</div>', unsafe_allow_html=True)
                 st.plotly_chart(chart_theme(fig, 230), width="stretch", config={"displayModeBar": False})
             else:
-                st.markdown(f'<div class="section-title">{drill_target}: priority-share split</div><div class="section-note">Not reproducible on this source: the resilience band needs the own-money, saving-behaviour and social-support capabilities, which are absent here.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="section-title">{drill_target}: priority-share split</div><div class="section-note">Not available on this wave: the resilience band needs own-money, saving-behaviour and social-support answers that are absent here.</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             gap_note = f"{drill_target} sits {drill['active_access'] - national_access:+.1%} versus the national weighted mean for active access in this filtered view, and there is no gap signal designed yet to say whether buffer building or digital access would be the better first intervention."
-            priority_note = f"PRIORITY band inside {drill_target} is shown above by setting." if "resilience_band" in view else "The resilience-band split is not reproducible on the active source; consult page 05 when the master Stata source is loaded."
+            priority_note = f"PRIORITY band inside {drill_target} is shown above by setting." if "resilience_band" in view else "The resilience-band split is unavailable on this wave; consult page 05."
             st.markdown(f'<div class="callout"><strong>Drill-down read.</strong><br><br>{priority_note}{gap_note}</div>', unsafe_allow_html=True)
-    data_footer(view, "Regional view")
 
 
 def render_resilience(df: pd.DataFrame) -> None:
@@ -1116,20 +1479,19 @@ def render_resilience(df: pd.DataFrame) -> None:
     if not has_data(view):
         return
     if "resilience_band" not in view:
-        st.markdown('<div class="callout"><strong>The resilience lens is not reproducible on the active source.</strong><br>The lens needs four observed capabilities; this source carries only the emergency-funds one. Own money, saving behaviour and a social-support contact have no label-verified counterpart here, so the Priority / Watch / Resilient band is withheld rather than approximated. Load the master Stata source for the full lens; the one component this source does support is shown below.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="callout"><strong>The resilience lens is not available on this wave.</strong><br>The lens needs four observed capabilities; the chosen wave carries only the emergency-funds one. Own money, saving behaviour and a social-support contact are absent, so the Priority / Watch / Resilient band is withheld rather than approximated. Choose the 2024 survey year in the left sidebar for the full lens; the one capability this wave does support is shown below.</div>', unsafe_allow_html=True)
         difficult_available = weighted_rate(view, view["emergency_difficult"]) if "emergency_difficult" in view else None
         c1, c2 = st.columns(2)
         with c1:
             if difficult_available is None:
-                metric_card("Emergency feels difficult", "—", "not reproducible on this source", "⊘", "rose")
+                metric_card("Emergency feels difficult", "—", "not asked on this wave", "⊘", "rose")
             else:
                 metric_card("Emergency feels difficult", pct(difficult_available), "say raising 56,000 Rwf would be difficult (the lens component this source does support)", "◌", "orange")
         with c2:
             metric_card("Resilience band", "—", "needs all four lens capabilities · withheld", "⊘", "rose", delay=1)
-        data_footer(view, "Resilience view · lens withheld on this source")
         return
-    risk = weighted_rate(view, view["resilience_band"].eq("Priority").astype(float))
-    watch = weighted_rate(view, view["resilience_band"].eq("Watch").astype(float))
+    risk = weighted_rate(view, band_flag(view, "Priority"))
+    watch = weighted_rate(view, band_flag(view, "Watch"))
     difficult = weighted_rate(view, view["emergency_difficult"])
     stress = weighted_rate(view, view["financial_stress"])
     c1, c2, c3, c4 = st.columns(4)
@@ -1155,7 +1517,7 @@ def render_resilience(df: pd.DataFrame) -> None:
     with chart:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Priority share by setting</div><div class="section-note">A useful first cut for delivery design</div>', unsafe_allow_html=True)
-        setting = weighted_group(view.assign(priority=view["resilience_band"].eq("Priority").astype(float)), "setting", "priority")
+        setting = weighted_group(view.assign(priority=band_flag(view, "Priority")), "setting", "priority")
         fig = go.Figure(go.Bar(x=setting["group"], y=setting["value"] * 100, marker_color=["#d95362" if x == "Rural" else "#f0a1ad" for x in setting["group"]], text=[f"{v:.0f}%" for v in setting["value"] * 100], textposition="outside", cliponaxis=False, hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
         fig.update_yaxes(range=[0, max(30, float(setting["value"].max() * 100 + 10))], ticksuffix="%")
         st.plotly_chart(chart_theme(fig, 245), width="stretch", config={"displayModeBar": False})
@@ -1170,7 +1532,6 @@ def render_resilience(df: pd.DataFrame) -> None:
     with z:
         st.markdown('<div class="chart-card"><span class="tag">Protection</span><div class="section-title" style="margin-top:.55rem">Shock-responsive finance</div><div class="section-note">Connect social protection and micro-insurance conversations to the shocks households report — especially when social networks are the only fallback.</div></div>', unsafe_allow_html=True)
 
-    data_footer(view, "Resilience view")
 
 
 EXPLORER_VARS = {
@@ -1203,7 +1564,6 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
         with why_col:
             if st.button("Why is this withheld?", key="open_gate_modal"):
                 explorer_gate_modal(profile)
-        data_footer(view, "Explorer view · output withheld")
         return
     left, right = st.columns([.7, 1.3])
     with left:
@@ -1230,7 +1590,6 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     st.markdown('<div class="callout"><strong>Privacy and publication control.</strong><br>Household-level records and raw CSV export are disabled because no authorization or disclosure/publication approval record was supplied. The table above is an aggregate analytical view only.</div>', unsafe_allow_html=True)
     aggregate_csv = aggregate.to_csv(index=False).encode("utf-8") if not aggregate.empty else b""
     st.download_button("Download aggregate summary (approval required)", aggregate_csv, file_name="insightrwanda_aggregate_summary.csv", mime="text/csv", type="secondary", disabled=True if profile is None else profile.publication_status != "Approved", help="Unavailable while the source profile records no authorization and publication approval. Hovering the callout above shows the current gate state in detail.")
-    data_footer(view, "Explorer view")
 
 
 def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
@@ -1266,7 +1625,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
         st.markdown(f'<div class="callout"><strong>Scope.</strong><br><br>{profile.source_variables:,} source variables were inventoried. This dashboard loads {profile.analytical_variables:,} documented analytical variables, plus derived labels and indicators.<br><br><strong>Important.</strong><br><br>A clean load, unique key and valid codes do not prove that the survey is representative or that an official statistic can be published.</div>', unsafe_allow_html=True)
 
     section_head("Quality limitations", "What remains outside the executed checks")
-    st.markdown('<div class="chart-card"><div class="section-note" style="font-size:.84rem;line-height:1.65">The workspace does not contain the fieldwork protocol, sample design, questionnaire version, enumerator quality controls, non-response adjustments, geographic boundary release, disclosure review, or an approved publication record. These should be supplied before an official public research release.</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="chart-card"><div class="section-note" style="font-size:.8rem;line-height:1.65">The workspace does not contain the fieldwork protocol, sample design, questionnaire version, enumerator quality controls, non-response adjustments, geographic boundary release, disclosure review, or an approved publication record. These should be supplied before an official public research release.</div></div>', unsafe_allow_html=True)
 
 
 def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
@@ -1277,7 +1636,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
     )
     left, right = st.columns([1.05, .95])
     with left:
-        st.markdown(f'<div class="chart-card"><div class="eyebrow">Source profile</div><div class="section-title" style="font-size:1.25rem">Survey data · {SOURCE_LABELS[active_source()]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="chart-card"><div class="eyebrow">Source profile</div><div class="section-title" style="font-size:1.12rem">Survey data · {COMBINED_LABEL}</div>', unsafe_allow_html=True)
         source_rows = [
             ["Source ID", profile.source_id], ["Format", profile.format], ["File size", f"{profile.file_size_mb:.2f} MB"],
             ["Source SHA-256", profile.source_sha256], ["Analysis version", profile.analysis_version],
@@ -1288,7 +1647,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
         st.dataframe(pd.DataFrame(source_rows, columns=["Field", "Status / value"]), hide_index=True, width="stretch", height=405)
         st.markdown('</div>', unsafe_allow_html=True)
     with right:
-        st.markdown('<div class="chart-card"><div class="eyebrow">Evidence chain</div><div class="section-title" style="font-size:1.25rem">Five steps, one audit trail</div>', unsafe_allow_html=True)
+        st.markdown('<div class="chart-card"><div class="eyebrow">Evidence chain</div><div class="section-title" style="font-size:1.12rem">Five steps, one audit trail</div>', unsafe_allow_html=True)
         for no, title, copy in [
             ("01", "Inspect", "Read the original Stata metadata and confirm the supplied file is present."),
             ("02", "Load", "Read the selected source columns with explicit failure on missing variables."),
@@ -1296,7 +1655,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
             ("04", "Calculate", "Apply the indicator definition, denominator and household weight."),
             ("05", "Explain", "Display the estimate with source variables, scope and limitations."),
         ]:
-            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.72rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{copy}</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.72rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.8rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{copy}</div></div></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Available source materials", "What was actually found in the workspace")
@@ -1317,17 +1676,17 @@ def render_about(df: pd.DataFrame) -> None:
     )
     left, right = st.columns([1.05, .95])
     with left:
-        st.markdown('<div class="chart-card"><div class="eyebrow">The challenge</div><div class="section-title" style="font-size:1.3rem">From “who is included?” to “who can absorb a shock?”</div><p class="section-note" style="font-size:.86rem;line-height:1.6">The 2026 NISR Big Data Hackathon calls for solutions that address Financial Inclusion & Poverty Reduction with tangible value for vulnerable households, policy makers and civil society. This prototype focuses on the gap between access to a financial channel and meaningful household resilience.</p><div class="callout"><strong>Product thesis.</strong> Financial inclusion becomes more actionable when teams can see the intersection of access, buffers, digital reach, geography and household vulnerability in one place.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="chart-card"><div class="eyebrow">The challenge</div><div class="section-title" style="font-size:1.15rem">From “who is included?” to “who can absorb a shock?”</div><p class="section-note" style="font-size:.82rem;line-height:1.6">The 2026 NISR Big Data Hackathon calls for solutions that address Financial Inclusion & Poverty Reduction with tangible value for vulnerable households, policy makers and civil society. This prototype focuses on the gap between access to a financial channel and meaningful household resilience.</p><div class="callout"><strong>Product thesis.</strong> Financial inclusion becomes more actionable when teams can see the intersection of access, buffers, digital reach, geography and household vulnerability in one place.</div></div>', unsafe_allow_html=True)
     with right:
-        st.markdown('<div class="chart-card"><div class="eyebrow">What is inside</div><div class="section-title" style="font-size:1.3rem">A compact, auditable stack</div>', unsafe_allow_html=True)
+        st.markdown('<div class="chart-card"><div class="eyebrow">What is inside</div><div class="section-title" style="font-size:1.15rem">A compact, auditable stack</div>', unsafe_allow_html=True)
         for no, title, desc in [("01", "Overview", "National signal with weighted KPI cards and the headline inclusion / resilience gap."), ("02", "Regional pulse", "Province and district comparison for targeting and delivery planning."), ("03", "Resilience lab", "Transparent composite lens and action prompts for household protection."), ("04", "Data explorer", "Inspect aggregate evidence; exports remain approval-gated.")]:
-            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.75rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.84rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{desc}</div></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="display:flex;gap:.8rem;padding:.75rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.8rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{desc}</div></div></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     section_head("Method and transparency", "The dashboard is intentionally descriptive")
     m1, m2, m3 = st.columns(3)
     with m1:
-        st.markdown('<div class="chart-card"><div class="section-title">Weighted estimates</div><div class="section-note">All headline rates use <span class="mono">hh_wt</span>, the household weight supplied in the Stata file. This improves representativeness relative to a raw row count.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="chart-card"><div class="section-title">Weighted estimates</div><div class="section-note">All headline rates use the survey\'s household weights, so larger areas and groups count their fair share.</div></div>', unsafe_allow_html=True)
     with m2:
         st.markdown('<div class="chart-card"><div class="section-title">Resilience lens</div><div class="section-note">The score is the mean of four binary capabilities: emergency funds, own money, saving at least sometimes and a potential social support contact. It is a prioritisation lens, not a poverty line or modelled probability.</div></div>', unsafe_allow_html=True)
     with m3:
@@ -1351,11 +1710,13 @@ def lens_signature(df: pd.DataFrame, page: str) -> str | None:
     prefix = LENS_PREFIXES.get(page)
     if not prefix:
         return None
+    year = active_year()
     province = st.session_state.get(f"{prefix}_province", "All provinces")
     district = st.session_state.get(f"{prefix}_district", "All districts")
     setting = st.session_state.get(f"{prefix}_setting", "All settings")
     sex = st.session_state.get(f"{prefix}_sex", "All respondents")
     parts = [part for part in (
+        None if year == YEAR_ALL else YEAR_SHORT.get(year, year),
         None if province == "All provinces" else province,
         None if district == "All districts" else district,
         None if setting == "All settings" else setting,
@@ -1450,7 +1811,10 @@ def _lens_view(df: pd.DataFrame, page: str) -> pd.DataFrame:
     district = st.session_state.get(f"{prefix}_district", "All districts")
     setting = st.session_state.get(f"{prefix}_setting", "All settings")
     sex = st.session_state.get(f"{prefix}_sex", "All respondents")
-    pre = df if province == "All provinces" else df[df["province"].eq(province)]
+    # The survey year is already applied once in main(); the lens adds only the
+    # page-level geographic/demographic filters on top of it.
+    pre = df
+    pre = pre if province == "All provinces" else pre[pre["province"].eq(province)]
     return pipeline_filter_analysis_data(
         pre,
         district=None if district == "All districts" else district,
@@ -1464,9 +1828,8 @@ def official_poverty_contract_modal() -> None:
     status = official_poverty_status()
     st.markdown(
         "<p class='section-note'>A data steward unlocks the official estimate only by supplying every "
-        "input below explicitly in <span class='mono'>research/estimation.py::official_poverty_status</span> "
-        "— nothing is inferred or defaulted. The app blocks this on purpose: a poverty rate without a "
-        "documented line, aggregate and variance method would be fabrication.</p>",
+        "required input explicitly — nothing is inferred or defaulted. The app blocks this on purpose: "
+        "a poverty rate without a documented line, aggregate and variance method would be fabrication.</p>",
         unsafe_allow_html=True,
     )
     contract = pd.DataFrame(
@@ -1490,8 +1853,8 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
     released = aggregate_release_allowed(profile)
     st.markdown(
         f"<p class='section-note'>The gate is coded, tested software — not a disclaimer. "
-        "<span class='mono'>aggregate_release_allowed()</span> returns <span class='mono'>True</span> only when both "
-        "the authorization record and the publication record begin with \"Approved\". Current state:</p>",
+        "Aggregates are released only when both the authorization record and the publication record "
+        "begin with \"Approved\". Current state:</p>",
         unsafe_allow_html=True,
     )
     st.dataframe(pd.DataFrame([
@@ -1578,10 +1941,10 @@ def _ask_history() -> list[dict[str, object]]:
     return st.session_state["ask_messages"]
 
 
-def _ask_signature(source_key: str, lens_note: str, view: pd.DataFrame) -> str:
+def _ask_signature(lens_note: str, view: pd.DataFrame) -> str:
     """Human-readable binding between answers and the context they were computed under."""
 
-    return f"{SOURCE_LABELS[source_key]} · {lens_note if lens_note else f'{len(view):,} records'}"
+    return f"{COMBINED_LABEL_SHORT} · {lens_note if lens_note else f'{len(view):,} records'}"
 
 
 def _ask_queue(question: str | None = None) -> None:
@@ -1659,7 +2022,7 @@ def _ask_process(
     page = st.session_state.get("workspace_nav", "Overview")
     view = _lens_view(df, page)
     lens_note = lens_signature(view, page) or ""
-    signature = _ask_signature(active_source(), lens_note, view)
+    signature = _ask_signature(lens_note, view)
     previous = st.session_state.get("ask_context_signature")
     if previous != signature:
         # Never present numbers from an older source or filter set as current ones:
@@ -1676,7 +2039,7 @@ def _ask_process(
             frame=view,
             profile=profile,
             checks=checks,
-            source_label=SOURCE_LABELS[active_source()],
+            source_label=COMBINED_LABEL,
             lens_note=lens_note,
             page=page,
             indicator_hint=ask_indicator_hint(page),
@@ -1893,7 +2256,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
 @st.dialog("Brief preview — what the export contains", width="large")
 def brief_preview_modal(brief, names: dict[str, str]) -> None:
     st.markdown(f"<div class='eyebrow'>{brief.eyebrow} · {brief.lens_note}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='section-title'>{brief.narrative}</div><p class='section-note' style='font-size:.84rem'>{brief.caution}</p>", unsafe_allow_html=True)
+    st.markdown(f"<div class='section-title'>{brief.narrative}</div><p class='section-note' style='font-size:.8rem'>{brief.caution}</p>", unsafe_allow_html=True)
     st.dataframe(
         pd.DataFrame(brief.kpis, columns=["Value", "Figure", "Detail"]),
         hide_index=True,
@@ -1961,39 +2324,87 @@ def load_spss_profile(path: Path) -> SourceProfile:
     return build_spss_profile(path)
 
 
-SPSS_EXPECTED_COLUMNS = [
-    "key", "row_id", "hh_wt", "pop_wt", "hh_size", "psu", "a1", "a2", "a3", "b0", "b2",
-    "c14_5", "e7", "ef9", "qf4_01", "qf4_03", "qf4_04", "qf4_05", "qf4_06",
-    "e9b", "active_access", "mobile_money", "bank_use", "sacco_use",
-    "emergency_fund", "internet_access", "income_pressure",
-]
+@st.cache_data(show_spinner="Building the combined dataset…")
+def load_combined_frame() -> pd.DataFrame:
+    """One stacked analytical dataset from both supplied sources.
+
+    The two files share no record key, so this pools them as two independent
+    samples of the same survey programme on the harmonized master schema — a
+    stacked union, never a join. Columns are the union of both sources: the
+    FinScope 2020 wave carries NaN for master-only measures, which every
+    indicator denominator excludes rather than imputes.
+    """
+
+    master = load_master_frame().copy()
+    spss = load_spss_workload(SPSS_PATH).copy()
+    master["source"] = "master"
+    spss["source"] = "spss"
+    # Survey year, documented by the supplied release names: the master file is
+    # the FinScope 2024 wave; the SPSS file is the FinScope 2020 wave (fieldwork
+    # September-November 2019 per official documentation).
+    master["survey_year"] = pd.array([2024] * len(master), dtype="Int64")
+    spss["survey_year"] = pd.array([2020] * len(spss), dtype="Int64")
+    # The head's sex is not observable on the SPSS subset (B0 only records
+    # whether the respondent is the head), so it stays missing there.
+    spss["head_sex"] = np.nan
+    combined = pd.concat([master, spss], ignore_index=True)
+    # Unscored resilience rows follow the master convention: 'Unknown', which
+    # the band computations exclude from their denominators.
+    combined["resilience_band"] = combined["resilience_band"].fillna("Unknown")
+    combined.attrs["source_id_key"] = COMBINED_SOURCE_ID
+    return combined
+
+
+@st.cache_data(show_spinner=False)
+def load_combined_profile() -> SourceProfile:
+    """Source profile for the combined pool, derived from the two source profiles."""
+
+    master_profile = load_source_profile(str(DATA_PATH))
+    spss_profile = load_spss_profile(SPSS_PATH)
+    return SourceProfile(
+        source_id=COMBINED_SOURCE_ID,
+        path=f"{master_profile.path} + {spss_profile.path}",
+        format="Stacked Stata .dta + SPSS .sav (two independent samples)",
+        file_size_mb=round(master_profile.file_size_mb + spss_profile.file_size_mb, 2),
+        source_sha256=f"{master_profile.source_sha256[:16]}+{spss_profile.source_sha256[:16]}",
+        analysis_version=f"{master_profile.analysis_version} + {spss_profile.analysis_version}",
+        rows=master_profile.rows + spss_profile.rows,
+        source_variables=master_profile.source_variables + spss_profile.source_variables,
+        analytical_variables=len(PIPELINE_COLUMNS),
+        mapped_variables=len(PIPELINE_COLUMNS),
+        source_release="Not documented in supplied materials",
+        population_period="FinScope 2024 wave (master); FinScope 2020 wave (SPSS, fieldwork Sept-Nov 2019)",
+        metadata_status="Both sources inspected; embedded variable and value labels available",
+        analysis_status="Combined pool ready; measures absent on one file are computed on the records where they are observed",
+        authorization_status="Unknown: no authorization record supplied",
+        publication_status="Not approved: no disclosure/publication approval supplied",
+        documentation=("2026 Hackathon Competition.pdf", "Embedded Stata and SPSS variable/value labels"),
+        notes=(
+            "The two files share no record key; the combined dataset stacks them as two independent samples on the harmonized variables.",
+            "Measures with no counterpart on the SPSS wave (own money, saving behaviour, social support, income bands) stay missing there and are never imputed.",
+            "The dashboard does not expose household-level records by default and does not publish the combined file.",
+        ),
+    )
 
 
 def load_analysis_workload() -> tuple[pd.DataFrame, SourceProfile, list[QualityCheck]]:
-    """Load the active source with its profile and executed quality checks."""
+    """Load the single combined dataset with its profile and executed quality checks."""
 
-    if active_source() == "spss":
-        df = load_spss_workload(SPSS_PATH)
-        profile = load_spss_profile(SPSS_PATH)
-        checks = run_quality_checks(
-            df,
-            source_variable_count=profile.source_variables,
-            expected_columns=SPSS_EXPECTED_COLUMNS,
-            row_unit="individual respondent",
-            slice_label="the documented second-source subset mapped to the master schema",
-        )
-    else:
-        raw = pipeline_load_analysis_data(DATA_PATH)
-        df = pipeline_enrich_analysis_data(raw)
-        df.attrs["source_id_key"] = "master"
-        profile = load_source_profile(str(DATA_PATH))
-        checks = run_quality_checks(df, source_variable_count=profile.source_variables)
+    df = load_combined_frame()
+    profile = load_combined_profile()
+    checks = run_quality_checks(
+        df,
+        source_variable_count=profile.source_variables,
+        expected_columns=list(df.columns),
+        row_unit="mixed household and individual respondent rows from two pooled samples",
+        slice_label=f"the combined harmonized slice ({len(df.columns):,} columns)",
+    )
     return df, profile, checks
 
 
 def main() -> None:
     try:
-        df, profile, checks = load_analysis_workload()
+        pool, profile, checks = load_analysis_workload()
     except Exception as exc:
         st.error(
             "InsightRwanda could not open its survey data, so the dashboard has nothing to show. "
@@ -2003,8 +2414,12 @@ def main() -> None:
         )
         st.stop()
 
-    app_header(df, profile, checks)
-    page = nav(df)
+    # The sidebar's Survey year scopes every page: filter the combined pool once,
+    # here, so charts, tables, briefs and the assistant all share the same scope.
+    df = apply_year_filter(pool, active_year())
+
+    app_header()
+    page = nav(df, profile, checks)
     if page == "Overview":
         render_overview(df)
     elif page == "Financial inclusion":

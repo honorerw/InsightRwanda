@@ -29,7 +29,7 @@ from research.spss_pipeline import build_spss_profile, load_spss_analysis_data
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MASTER_SOURCE = ROOT / "data" / "dataset.dta"
+MASTER_SOURCE = ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"
 SPSS_SOURCE = ROOT / "data" / "Rwanda FinScope 2020_Final Data.sav"
 
 MASTER_LABEL = "Master Stata survey · 13,994 households"
@@ -221,7 +221,7 @@ class SourceReferenceTests(AssistantUnitTestBase):
         identifiers = [reference.identifier for reference in answer.references]
         self.assertIn("FI-02", identifiers)
         self.assertNotIn("source-profile-not-loaded", identifiers)
-        self.assertNotIn("dataset.dta", answer.answer)
+        self.assertNotIn("FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta", answer.answer)
 
 
 class PrivacyAndInjectionTests(AssistantUnitTestBase):
@@ -253,7 +253,7 @@ class PrivacyAndInjectionTests(AssistantUnitTestBase):
                 answer = self.ask(question)
                 self.assertEqual(answer.question_kind, "injection")
                 self.assertFalse(answer.numeric_verified)
-                self.assertNotIn("data/dataset.dta", answer.answer)
+                self.assertNotIn("data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta", answer.answer)
                 self.assertNotIn("venv", answer.answer)
 
     def test_answers_never_leak_file_paths_or_exception_details(self):

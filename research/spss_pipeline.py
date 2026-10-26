@@ -3,8 +3,8 @@
 `data/Rwanda FinScope 2020_Final Data.sav` is a distinct survey extract:
 
 * 12,480 rows — the row unit is the *individual respondent* (KEY is the
-  household id; households can hold several rows), unlike the master Stata
-  file where `dataset.dta` rows are households.
+  household id; households can hold several rows), unlike the FinScope 2024
+  master Stata file where rows are households.
 * variable names are uppercase and some sections were renamed, so the master
   slice cannot be reconstructed from this file. A documented subset is mapped
   below; everything else stays out of the analytical frame.
@@ -59,7 +59,7 @@ SPSS_ANALYSIS_VERSION = _code_fingerprint()
 # C14A4 1=Yes-have-access/2=No; EF7 1=monthly/2=sometimes/3=rarely/4=never).
 SPSS_COLUMNS = [
     "ID", "KEY", "HH_WEIGHT", "Individuals_Weight", "TOTAL_IND", "NUMVILL",
-    "A1", "A2", "A3", "B0", "B2", "C14A4", "EF7",
+    "A1", "A2", "A3", "B0", "B1", "B2", "C14A4", "EF7",
     *[f"QF5_{i:02d}" for i in range(1, 11)],
     "EF9",
 ]
@@ -76,6 +76,7 @@ _RENAME = {
     "A2": "a2",       # district code
     "A3": "a3",       # urban/rural code (master uses a6; codes match 1/2)
     "B0": "b0",       # relationship to head (1 = household head)
+    "B1": "b1",       # age of respondent (same label/semantics as the master's b1)
     "B2": "b2",       # respondent sex (1 male, 2 female)
     "C14A4": "c14_5", # internet access (Yes-have-access/No) — label-verified alias
     "EF7": "e7",      # income-coverage frequency — label-verified alias

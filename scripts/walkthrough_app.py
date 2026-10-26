@@ -32,13 +32,11 @@ PAGES = [
 ]
 
 
-def visit(page: str, source: str | None = None):
+def visit(page: str):
     """Render one page in a fresh AppTest session with the nav pre-selected."""
 
     at = st_test.AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
     at.session_state["workspace_nav"] = page
-    if source is not None:
-        at.session_state["analysis_source"] = source
     at.run()
     return at
 
@@ -88,42 +86,17 @@ def main() -> int:
         if apply_filter_lens(at, page) and not report(f"{page} · Kigali/Urban/Female", at):
             failures.append(f"{page} (filtered)")
 
-    print("Phase 4 — SPSS second source: every page renders with honest degradation")
-    for page in PAGES:
-        at = visit(page, source="spss")
-        if not report(f"{page} (spss source)", at):
-            failures.append(f"{page} (spss)")
-
-    print("Phase 5 — SPSS degradation honesty markers")
-    at = visit("Resilience lab", source="spss")
-    marker_ok = not at.exception and any(
-        "not reproducible" in (md.value or "").lower() for md in at.markdown
-    )
-    if marker_ok:
-        print("  OK    Resilience lab (spss) shows the withheld-not-reproducible callout")
-    else:
-        failures.append("Resilience lab (spss) honesty marker")
-        print("  FAIL  Resilience lab (spss) missing the not-reproducible callout")
-    at = visit("Financial inclusion", source="spss")
-    withheld_ok = not at.exception and any(
-        "not reproducible" in (md.value or "").lower() for md in at.markdown
-    )
-    if withheld_ok:
-        print("  OK    Financial inclusion (spss) shows the withheld indicator cards")
-    else:
-        failures.append("Financial inclusion (spss) honesty marker")
-        print("  FAIL  Financial inclusion (spss) missing withheld indicator markers")
-
-    print("Phase 6 — Overview tab structure")
+    print("Phase 4 — Overview structure: cards, chart panels and click-through details")
     at = visit("Overview")
+    charts = at.get("plotly_chart")
     if at.exception:
-        failures.append("Overview tabs")
-        print(f"  FAIL  Overview tabs: {at.exception[0].value}")
-    elif len(at.tabs) == 2:
-        print("  OK    Overview · 2 tabs present (National signal / Opportunity map; Train & predict has its own page)")
+        failures.append("Overview structure")
+        print(f"  FAIL  Overview structure: {at.exception[0].value}")
+    elif len(charts) >= 2:
+        print(f"  OK    Overview · {len(charts)} chart panels and summary cards render without tabs")
     else:
-        failures.append("Overview tab count")
-        print(f"  FAIL  Overview · expected 2 tabs, found {len(at.tabs)}")
+        failures.append("Overview chart panels")
+        print(f"  FAIL  Overview · expected >=2 chart panels, found {len(charts)}")
 
     if failures:
         print(f"\nWALKTHROUGH FAILED ({len(failures)}): {failures}")

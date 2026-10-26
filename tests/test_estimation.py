@@ -111,7 +111,7 @@ class GoldenSourceEstimationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.raw = load_analysis_data(cls.ROOT / "data" / "dataset.dta")
+        cls.raw = load_analysis_data(cls.ROOT / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta")
         cls.data = enrich_analysis_data(cls.raw)
 
     def test_real_source_band_labels_are_consistent_with_pipeline_dicts(self):

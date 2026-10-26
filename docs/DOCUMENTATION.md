@@ -3,7 +3,7 @@
 **Project:** InsightRwanda · Financial Inclusion & Poverty Research Analytics
 **Context:** NISR 2026 Big Data Hackathon — Track 2 (Financial Inclusion & Poverty Reduction in Rwanda)
 **Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18
-**Current state at documentation time:** 52/52 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG exports), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
+**Current state at documentation time:** 117/117 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG exports), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
 
 > Verified at a recent audit: SHA-256 `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae` · analysis version `financial_inclusion_135869b472e3`
 
@@ -24,7 +24,7 @@
 
 ## 1. Purpose and Scope
 
-InsightRwanda is a Streamlit research and analytics application. It converts the supplied NISR Stata survey file (`data/dataset.dta`) into a presentation-ready set of **weighted financial-inclusion indicators** and supporting research pages. This project is deliberately **explicit about research boundaries**: it does not fabricate an official poverty estimate, does not publish household-level records, and does not claim official statistical publication status.
+InsightRwanda is a Streamlit research and analytics application. It converts the supplied NISR Stata survey file (`data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta`) into a presentation-ready set of **weighted financial-inclusion indicators** and supporting research pages. This project is deliberately **explicit about research boundaries**: it does not fabricate an official poverty estimate, does not publish household-level records, and does not claim official statistical publication status.
 
 ### What this project does
 
@@ -54,12 +54,16 @@ InsightRwanda/
 │   ├── data_pipeline.py          # Loading, enrichment, filtering, aggregation
 │   ├── indicators.py             # Indicator definitions + weighted calculations
 │   ├── quality.py                # Structural + analytical-slice quality checks
+│   ├── modeling.py               # Resilience-band predictive workflow
+│   ├── spss_pipeline.py          # Second-source SPSS loader + verified aliases
+│   ├── joint.py                  # Pooled cross-source analysis + transport model
 │   └── catalog.py                # Source profile, SHA-256, governance gates
 ├── tests/
 │   ├── test_real_pipeline.py     # 13 real-source + synthetic-fixture tests
-│   └── test_spss_pipeline.py     # 10 tests incl. a synthetic .sav + real SPSS integration
+│   ├── test_spss_pipeline.py     # 10 tests incl. a synthetic .sav + real SPSS integration
+│   └── test_joint.py             # 27 pooled-analysis, export-contract + transport tests
 ├── data/
-│   ├── dataset.dta               # Supplied NISR Stata source (READ-ONLY input)
+│   ├── FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta # Supplied NISR Stata source (READ-ONLY input)
 │   └── Rwanda FinScope 2020_Final Data.sav  # Supplied SPSS source (READ-ONLY input)
 ├── 2026 Hackathon Competition.pdf # Scope reference (READ-ONLY input)
 ├── requirements.txt               # streamlit, pandas, numpy, plotly, pyreadstat
@@ -74,7 +78,7 @@ InsightRwanda/
 
 ```text
             ┌───────────────────────────────────────────────┐
-            │ data/dataset.dta  (READ-ONLY Stata source)    │
+            │ data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta  (READ-ONLY Stata source)    │
             └───────────────────────┬───────────────────────┘
                                     │ pd.read_stata (94 analytical columns)
                                     ▼
@@ -111,7 +115,7 @@ data/Rwanda FinScope    │                      ▼
                                     ▼
             ┌───────────────────────────────────────────────┐
             │ app.py (Streamlit presentation layer)         │
-            │ Source: dataset.dta master or SPSS second     │
+            │ Source: FinScope 2024 master or SPSS 2020 second     │
             │ Pages: Overview · Financial inclusion ·       │
             │ Poverty insights · Geographic insights ·      │
             │ Resilience lab · Predictive insights ·        │
@@ -314,6 +318,21 @@ Current profile status (defaults, no approvals supplied):
 - → `aggregate_release_allowed()` returns `False`.
 - `source_release` and `population_period` are `"Not documented in supplied materials"`.
 
+### 4.8 `research/joint.py`
+
+Pooled cross-source analysis (added 2026-10-25). The two supplied files share **no record key**, so this module never joins them; it stacks them as independent samples on the label-verified shared measures and keeps the source as a dimension.
+
+| Component | Purpose |
+|---|---|
+| `linkage_audit(master, spss)` | Reports unique keys per file, the shared-key count (0 on the supplied files), and a composite-key check: pairs matching on province/district/age/sex plus the share that also agree on every jointly observed measure (31% on the supplied files — far below the near-100% a re-keyed sample would show, so it is evidence against linkage, not for it). |
+| `build_joint_frame(master, spss, wave_years=None)` | Stacks the harmonized columns, sets `source`, `wave_year` (2020 for SPSS, empty for the undated master), `weight` (source weight) and `weight_share` (rescaled to sum to 1 per source, so pooling gives each file equal influence). Raises `JointFrameError` on missing columns. |
+| `WAVE_YEARS` | The single documented place to date a file. The master's wave is `None`; no year is inferred from content. |
+| `pooled_estimates(frame)` | Each of the seven shared measures by source, the gap in percentage points and the equal-source pooled figure, with valid denominators. |
+| `weighted_correlation(frame, columns)` / `weighted_cross_tab(frame, row, column)` | Pairwise-complete weighted Pearson correlations and row-percentage cross-tabs. |
+| `evaluate_transport(frame, target)` | Trains one non-leaking logistic model (demographics, household size, internet access, income pressure, emergency funds) four ways: within each source (out-of-fold), master→SPSS, SPSS→master, and pooled→each source. Reports weighted ROC-AUC, Brier, its base-rate reference and predicted/observed shares. Channel indicators that define the outcome are blocked by a leakage guard. |
+| `build_combined_dataset(master, spss)` | Returns the single stacked, harmonized dataset (20 columns) with a deterministic hashed `record_id` instead of the supplied keys. Backs `scripts/build_combined_dataset.py`, which writes `data/derived/insightrwanda_combined.csv` + `.metadata.json` (source hashes, row counts, linkage audit, column notes). `data/derived/` is git-ignored: the rows are respondent-level records and are never published by the app. |
+| `wave_note()` / `comparison_note()` | The exact caveats the UI repeats: one dated file only, and a source gap is not a time trend or a causal effect. |
+
 ---
 
 ## 5. Dashboard Reference — `app.py`
@@ -347,7 +366,7 @@ The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **
 | `load_source_profile(path)` | `@st.cache_data` wrapper around `build_source_profile`. |
 | `weighted_rate(frame, values, weights="hh_wt")` | Same validity rule as `research.indicators.weighted_mean`. |
 | `weighted_group(frame, group, measure)` / `weighted_distribution(frame, category)` | Per-group weighted bar data + weighted category mix. |
-| `has_data`, `data_footer`, `filter_bar`, `section_head`, `metric_card`, `chart_theme`, `app_header`, `nav`, `page_intro` | Reusable UI primitives. |
+| `has_data`, `filter_bar`, `section_head`, `metric_card`, `chart_theme`, `app_header`, `nav`, `page_intro` | Reusable UI primitives. |
 | `filter_bar` | Province + district + setting + respondent filter shell, wrapped around `pipeline_filter_analysis_data`. |
 | `lens_signature` / `lens_toast` | Describes the active lens and raises a quiet `st.toast` when it changes (added 2026-10-20). |
 | `kpi_countup()` | Animate numeric `.metric-value` text from 0 to its value on scroll (silent fallback, `prefers-reduced-motion` respected; added 2026-10-20). |
@@ -377,9 +396,9 @@ The page inherits the Overview's lens filter behaviour (prefix `predictive`) and
 
 ## 6. Data Sources
 
-### 6.1 Master — `data/dataset.dta` (Stata, READ-ONLY)
+### 6.1 Master — `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta` (Stata, READ-ONLY)
 
-- **File:** `data/dataset.dta` (Stata `.dta`, READ-ONLY input).
+- **File:** `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta` (Stata `.dta`, READ-ONLY input).
 - **Rows:** 13,994 (households).
 - **Source variables:** 2,442 (inventoried, not loaded).
 - **Analytical slice:** 94 documented source variables plus derived columns.
@@ -397,7 +416,7 @@ The page inherits the Overview's lens filter behaviour (prefix `predictive`) and
 - **PSU** is documented on this source (`NUMVILL`) — unlike the master — but strata/variance documentation still is not.
 - **Not reproducible on this source** (withheld, never imputed): the digital-bank channel (master `qf4_02`) — FI-01's union runs over the five present channels; `e9c`, `e6`, `e2a`, `e2c`, `i4a`, `i9a`, `g11a`, `n11`/`n12` — so FI-04, financial stress, three resilience-lens components, the resilience band and the predictive model are **not reproducible** here, and every page degrades to an explicit "not reproducible" card instead of approximating.
 - **Cross-source agreement:** the Financial inclusion page has an expander that loads *both* sources through their own pipelines and applies the shared indicator rules to each side (no merging). On the real files: FI-01 92.0% vs 89.6%, FI-02 95.9% vs 94.6%, FI-03 21.3% vs 27.9%, FI-04 master-only, FI-05 80.2% vs 77.7%, FI-06 14.1% vs 19.5% — differences reflect the different question filters and row units, not errors.
-- **Metadata source:** embedded SPSS variable/value labels (no external codebook supplied). Authorization and publication status remain undocumented, identical to the master.
+- **Metadata source:** embedded SPSS variable/value labels (no external codebook supplied). Authorization and publication status remain undocumented, identical to the master file.
 
 Real-indicator differences (row units differ) are surfaced in a cross-source agreement table on the Financial inclusion page rather than merged.
 
@@ -431,7 +450,7 @@ python -m unittest discover -s tests -v
 - **Side effect of the fix:** the `analysis_version` fingerprint naturally changed to `financial_inclusion_f43dfd9a140b` (its design behaviour: it re-fingerprints whenever research logic changes). The README's audit record was synced accordingly; the previous audit value was `financial_inclusion_135869b472e3`.
 - Additional polish applied in the same pass: `select_dtypes` updated to `include=["object", "str"]` to silence the pandas 4.0 `Pandas4Warning`, and "About the build" was wired into the sidebar navigation (previously dead code).
 
-> **Status:** fully green — 52/52 tests pass (original suite + estimation + briefs + real predictive-modeling suite + the page-surface artifact suite for the Predictive insights page). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080` (unchanged — the fingerprint covers data_pipeline, indicators, quality and estimation only).
+> **Status:** fully green — 117/117 tests pass (original suite + estimation + briefs + real predictive-modeling suite + the page-surface artifact suite for the Predictive insights page + the pooled joint-source suite). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080` (unchanged — the fingerprint covers data_pipeline, indicators, quality and estimation only).
 
 ### Notable interpretation limit
 
