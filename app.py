@@ -2572,7 +2572,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             "Insight Assistant",
             key="ask_launch",
             icon=":material/forum:",
-            help="Open the InsightRwanda AI Assistant. Answers use verified project "
+            help="Open the InsightRwanda Assistant. Answers use verified project "
                  "evidence; AI-polished wording runs only when enabled for the deployment.",
             on_click=_ask_toggle_panel,
         )
@@ -2589,7 +2589,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
     with st.container(key="ask_panel"):
         st.markdown(
             "<div class='ask-head'><img class='ask-mark' src='" + logo_data_uri() + "' alt='InsightRwanda logo'>"
-            "<div><div class='ask-title'>InsightRwanda AI Assistant</div>"
+            "<div><div class='ask-title'>InsightRwanda Assistant</div>"
             f"<div class='ask-subtitle'>{ASK_SUMMARY}</div></div></div>",
             unsafe_allow_html=True,
         )
