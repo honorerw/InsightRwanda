@@ -1,5 +1,7 @@
 # InsightRwanda
 
+[![CI](https://github.com/honorerw/InsightRwanda/actions/workflows/ci.yml/badge.svg)](https://github.com/honorerw/InsightRwanda/actions/workflows/ci.yml)
+
 InsightRwanda is a Streamlit research and analytics platform for the NISR 2026 Big Data Hackathon, focused on Financial Inclusion & Poverty Reduction in Rwanda.
 
 The application is connected to **two supplied sources**: the master `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta` (Stata, 13,994 households, the FinScope 2024 wave) and the second source `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, 12,480 individual respondents, the FinScope 2020 wave). Every page analyses **one combined dataset** that pools both waves as independent samples on the harmonized measures — no sidebar source selector; where a measure lacks a label-verified counterpart on one wave, its estimate is computed on the records where it is observed and never imputed. The two files share **no record key** (0 of 12,480 SPSS keys match a master key), so they are never merged: the pool keeps the source as a dimension and reports the source gap instead of a fabricated household link. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
