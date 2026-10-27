@@ -80,13 +80,18 @@ The assistant is **evidence-first**:
 - The optional Groq layer (`research/assistant_llm.py`) has two strictly
   separated jobs:
 
-  **General knowledge.** When the offline core has no verified evidence for a
-  question and Groq is configured, the question alone (no survey figure,
-  record or project metadata — the same email/key/identifier block applies)
-  may be answered from the model's background knowledge. The answer is always
-  labelled **“General AI answer — not from this survey's verified data”**; the
-  model is instructed to never state or compute statistics about the survey
-  data. With no key configured, such questions get the honest local fallback.
+  **General knowledge, with live web search.** When the offline core has no
+  verified evidence for a question and Groq is configured, the question alone
+  (no survey figure, record or project metadata — the same email/key/identifier
+  block applies) is sent as a general-knowledge request. Groq's server-side
+  **browser search** is enabled, so answers can use live web sources — current
+  events, finance, technology — and the model is instructed to name its
+  sources and to never state or compute statistics about the survey data. The
+  answer is always labelled **“General AI answer — drawn from general
+  knowledge with a live web search when needed, not from this survey's
+  verified data”**. With no key configured, such questions get the honest
+  local fallback; if the search-enabled request fails, one tool-free attempt
+  (model knowledge alone) is made before the error is shown.
 
   **Wording only.** For evidence answers, Groq can **only reword** an
   already-verified answer. It never chooses statistics, adds citations or

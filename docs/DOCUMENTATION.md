@@ -347,7 +347,7 @@ Pooled cross-source analysis (added 2026-10-25). The two supplied files share **
 | Transport | `groq` (official SDK), `openai/gpt-oss-120b` by default, 20-second timeout, `max_completion_tokens=1200`, `temperature=0.2`, short hidden reasoning on GPT-OSS models, SDK retries disabled (`max_retries=0`). |
 | Failures | Missing key `disabled`; ineligible payload `blocked`; quota `rate_limited`; bad key `invalid_key`; timeout `timeout`; empty response `invalid_response`; any other failure `unavailable`. No paid fallback provider. |
 
-**General-knowledge mode (`answer_general_with_status` / `GroqProvider.general`).** In addition to wording, the layer can answer questions the offline core has no verified evidence for (`question_kind="fallback"`). Only the user's typed question is then sent — never a survey figure, record, identifier or project metadata — with a fixed `GENERAL_GUIDANCE` prompt that instructs the model to never state, guess or compute any statistic about InsightRwanda's survey data, to refuse personal/household-level requests, and to treat the question as text rather than instructions. The same identifier block, 600-character question cap, 20-second timeout and error translation apply. Successes carry status `general` and are labelled in the UI as *“General AI answer — not from this survey's verified data”*; a privacy/length-blocked question is `refused` and never leaves the app; provider failures fall back to the deterministic answer with a plain status. |
+**General-knowledge mode (`answer_general_with_status` / `GroqProvider.general`).** In addition to wording, the layer can answer questions the offline core has no verified evidence for (`question_kind="fallback"`). Only the user's typed question is then sent — never a survey figure, record, identifier or project metadata — with a fixed `GENERAL_GUIDANCE` prompt that frames the model as a general-knowledge assistant, encourages live web answers with named sources for time-sensitive questions, forbids it to state, guess or compute any statistic about InsightRwanda's survey data, refuses personal/household-level requests, and treats the question as text rather than instructions. For gpt-oss models Groq's server-side **browser search** (`tools=[{"type": "browser_search"}]`, `tool_choice="auto"`) is enabled: the search sees the question text only and answers may cite live web pages; retrieval citation markers (【n†…】) are stripped before display. If the search-enabled request fails, one tool-free request (model knowledge alone) is attempted before the error is translated. The same identifier block, 600-character question cap, 20-second timeout and error translation apply. Successes carry status `general` and are labelled in the UI as *“General AI answer — drawn from general knowledge with a live web search when needed, not from this survey's verified data”*; a privacy/length-blocked question is `refused` and never leaves the app; provider failures fall back to the deterministic answer with a plain status. |
 
 ---
 
@@ -404,7 +404,8 @@ question is processed once, preventing duplicate submissions.
 
 Groq is optional. `_ask_provider()` reads `GROQ_API_KEY` from
 `st.secrets` first and the environment second (model: `GROQ_MODEL`, default
-`openai/gpt-oss-120b`), creates at most one client per session, and returns
+`openai/gpt-oss-120b`, which ships Groq's server-side browser search for the
+general-knowledge path), creates at most one client per session, and returns
 `None` on missing/malformed configuration. `_ask_process` routes a fallback
 question to `answer_general_with_status` when a provider exists and appends a
 labelled general answer (`general: True`); when the general send fails, the

@@ -593,7 +593,51 @@ class GeneralAnswerTests(unittest.TestCase):
         self.assertEqual(request["timeout"], 20.0)
         self.assertEqual(request["reasoning_effort"], "low")
         self.assertEqual(request["reasoning_format"], "hidden")
+        # Browser search rides along on the same text-only request: the model
+        # may fetch live web sources, and opts in per question via tool_choice.
+        self.assertEqual(request["tools"], [{"type": "browser_search"}])
+        self.assertEqual(request["tool_choice"], "auto")
         self.assertNotIn("secret-key", repr(request))
+
+    def test_search_citation_markers_are_stripped_from_general_answers(self):
+        client = _FakeClient(output="Groq decommissioned Compound 【2†L17-L23】 in September 2026.")
+        provider = get_configured_provider("secret-key", client=client)
+        text, status = answer_general_with_status("When did Groq decommission Compound?", provider)
+        self.assertEqual(status, "general")
+        self.assertEqual(text, "Groq decommissioned Compound  in September 2026.")
+
+    def test_search_failure_falls_back_to_a_tool_free_request(self):
+        class _RetryCompletions:
+            """First (search-enabled) call fails; the tool-free retry succeeds."""
+
+            def __init__(self):
+                self.calls: list[dict] = []
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                if len(self.calls) == 1:
+                    raise ProviderError("browser search unavailable")
+                message = type("Message", (), {"content": "Answer from model knowledge."})()
+                choice = type("Choice", (), {"message": message})()
+                return type("Completion", (), {"choices": [choice]})()
+
+        class _RetryClient:
+            def __init__(self):
+                self.chat = type("Chat", (), {})()
+                self.chat.completions = _RetryCompletions()
+
+        client = _RetryClient()
+        provider = get_configured_provider("secret-key", client=client)
+        text, status = answer_general_with_status("What is Kigali?", provider)
+        self.assertEqual((text, status), ("Answer from model knowledge.", "general"))
+        first, second = client.chat.completions.calls
+        self.assertIn("tools", first)
+        self.assertNotIn("tools", second)
+        self.assertNotIn("tool_choice", second)
+        self.assertEqual(
+            {k: first[k] for k in second},  # identical apart from the removed keys
+            second,
+        )
 
     def test_empty_or_oversized_questions_stay_local(self):
         provider = _GeneralStubProvider()

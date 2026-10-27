@@ -2536,9 +2536,11 @@ def _ask_render_message(message: dict[str, object]) -> None:
             status = message.get("ai_status")
             if message.get("general") is True:
                 st.markdown(
-                    "<div class='ask-state'>General AI answer — general AI knowledge, "
-                    "<strong>not</strong> from this survey's verified data. Survey figures "
-                    "belong to the dashboard pages; check anything else before relying on it.</div>",
+                    "<div class='ask-state'>General AI answer — drawn from general "
+                    "knowledge with a live web search when needed, <strong>not</strong> "
+                    "from this survey's verified data. Survey figures belong to the "
+                    "dashboard pages; double-check anything important before relying "
+                    "on it.</div>",
                     unsafe_allow_html=True,
                 )
             elif isinstance(status, str) and message.get("general_attempt") is True and status in ASK_GENERAL_STATUS:
