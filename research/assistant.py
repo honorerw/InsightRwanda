@@ -1098,19 +1098,15 @@ def _classify(text: str) -> str:
         return "poverty_blockers"
     if re.search(r"what is insight ?rwanda|tell me about (this|the) (project|app|product|platform)", low):
         return "identity"
-<<<<<<< HEAD
+    if re.search(r"\b(income|earnings)\b", low) and re.search(
+        r"\b(expenses?|expenditure|costs?|spend(?:ing)?|money left|living costs)\b", low
+    ):
+        return "income_expenses"
     if re.search(
         r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|"
         r"how (is|was|were|are).{0,60}(calculat|comput|derive)",
         low,
     ) and (project_context or _THIS_REFERENCE.search(low) or "reported" in low):
-=======
-    if re.search(r"\b(income|earnings)\b", low) and re.search(
-        r"\b(expenses?|expenditure|costs?|spend(?:ing)?|money left|living costs)\b", low
-    ):
-        return "income_expenses"
-    if re.search(r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|how (is|was|were|are).{0,60}(calculat|comput|derive)", low):
->>>>>>> 792c2dc (commited by dna)
         return "estimate_provenance"
     if re.search(r"is (this|that|it|the).{0,30}official", low):
         return "estimate_provenance"

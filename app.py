@@ -1717,20 +1717,6 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
             with slot:
                 metric_card(label, value, foot, icon, color)
 
-<<<<<<< HEAD
-    geo_measures = []
-    if "income_pressure" in view:
-        geo_measures.append(
-            weighted_group(view, "province", "income_pressure")
-            .drop(columns="numerator_n")
-            .rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
-        )
-    if "emergency_difficult" in view:
-        geo_measures.append(
-            weighted_group(view, "province", "emergency_difficult")
-            .drop(columns="numerator_n")
-            .rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
-=======
         context_plot = []
         if pressure is not None:
             context_plot.append(("Income pressure", float(pressure.estimate)))
@@ -1831,7 +1817,6 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         geographic_result = (
             f"{(provincial_pressure['value'].max() - provincial_pressure['value'].min()) * 100:.1f} pp range"
             if len(provincial_pressure) >= 2 else "Not available"
->>>>>>> 792c2dc (commited by dna)
         )
         access_buffer_result = "Not available"
         if "active_access" in view and "emergency_fund" in view:
@@ -2029,16 +2014,6 @@ def render_regional(df: pd.DataFrame) -> None:
     )
 
     section_head("District explorer", "Sorted by active formal access · filter the geography above to zoom in")
-<<<<<<< HEAD
-    district_table = weighted_group(view, "district", "active_access").drop(columns="numerator_n").rename(columns={"value": "active_access", "denominator_n": "active_n"})
-    district_emergency = weighted_group(view, "district", "emergency_fund").drop(columns="numerator_n").rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
-    district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
-    if "income_pressure" in view:
-        district_pressure = weighted_group(view, "district", "income_pressure").drop(columns="numerator_n").rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
-        district_table = district_table.merge(district_pressure, on="group", how="left")
-    if "emergency_difficult" in view:
-        district_difficulty = weighted_group(view, "district", "emergency_difficult").drop(columns="numerator_n").rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
-=======
     district_table = weighted_group(view, "district", "active_access")[['group', 'value', 'denominator_n']].rename(columns={"value": "active_access", "denominator_n": "active_n"})
     district_emergency = weighted_group(view, "district", "emergency_fund")[['group', 'value', 'denominator_n']].rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
     district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
@@ -2047,7 +2022,6 @@ def render_regional(df: pd.DataFrame) -> None:
         district_table = district_table.merge(district_pressure, on="group", how="left")
     if "emergency_difficult" in view:
         district_difficulty = weighted_group(view, "district", "emergency_difficult")[['group', 'value', 'denominator_n']].rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
->>>>>>> 792c2dc (commited by dna)
         district_table = district_table.merge(district_difficulty, on="group", how="left")
     dleft, dright = st.columns([1.4, .6])
     with dleft:
