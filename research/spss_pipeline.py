@@ -59,7 +59,7 @@ SPSS_ANALYSIS_VERSION = _code_fingerprint()
 # C14A4 1=Yes-have-access/2=No; EF7 1=monthly/2=sometimes/3=rarely/4=never).
 SPSS_COLUMNS = [
     "ID", "KEY", "HH_WEIGHT", "Individuals_Weight", "TOTAL_IND", "NUMVILL",
-    "A1", "A2", "A3", "B0", "B1", "B2", "C14A4", "EF7",
+    "A1", "A2", "A3", "B0", "B1", "B2", "C14A4", "EF7", "N4A", "N4B",
     *[f"QF5_{i:02d}" for i in range(1, 11)],
     "EF9",
 ]
@@ -80,6 +80,8 @@ _RENAME = {
     "B2": "b2",       # respondent sex (1 male, 2 female)
     "C14A4": "c14_5", # internet access (Yes-have-access/No) — label-verified alias
     "EF7": "e7",      # income-coverage frequency — label-verified alias
+    "N4A": "n11",     # monthly personal income band — label-verified income context
+    "N4B": "n12",     # annual personal income band — label-verified income context
 }
 
 # Verified second-source aliases: the embedded SPSS label names the identical
@@ -164,6 +166,10 @@ def enrich_spss_analysis_data(frame: pd.DataFrame) -> pd.DataFrame:
     # canonical names so no second interpretation of the codes can appear.
     for alias, source_column in _ALIASES.items():
         out[alias] = out[source_column]
+    # N4A uses code 14 for irregular/seasonal income, while the master
+    # n11 schema uses code 16. The embedded value labels establish the same
+    # category; normalize only that code before shared estimators run.
+    out["n11"] = out["n11"].replace({14: 16})
     # Five channels — the master's qf4_02 (digital bank) does not exist on
     # this source and is never invented; FI-01 reports the reduced union.
     out["active_access"] = any_yes(out, ["qf4_01", "qf4_03", "qf4_04", "qf4_05", "qf4_06"])
@@ -205,7 +211,7 @@ def build_spss_profile(path: str | Path) -> SourceProfile:
         source_release="Not documented in supplied materials",
         population_period="Not documented in supplied materials (FinScope 2020 wave indicated by file name only)",
         metadata_status="Inspected: embedded SPSS variable and value labels available",
-        analysis_status="Ready for the documented QF5/EF9 subset; resilience lens and predictive modeling not reproducible on this source",
+        analysis_status="Ready for the documented QF5/EF9/income-band subset; resilience lens and predictive modeling not reproducible on this source",
         authorization_status="Unknown: no authorization record supplied",
         publication_status="Not approved: no disclosure/publication approval supplied",
         documentation=("2026 Hackathon Competition.pdf", "Embedded SPSS variable labels and value labels"),
@@ -214,6 +220,7 @@ def build_spss_profile(path: str | Path) -> SourceProfile:
             "PSU is documented on this source (NUMVILL); strata, variance method and poverty methodology remain undocumented.",
             "QF4 on this file means 'registered in own name' — the master's QF4 (current use) maps to QF5 here.",
             "Channel set: no digital-bank variable exists on this source; its channel is excluded from FI-01's union, never imputed.",
+            "N4A/N4B are label-verified monthly and annual personal-income bands; N4A code 14 is normalized to the master n11 irregular-income code 16.",
             "The dashboard does not expose household-level records by default and does not publish the source file.",
         ),
     )
@@ -222,7 +229,7 @@ def build_spss_profile(path: str | Path) -> SourceProfile:
 # Column contract for pages: what this source explicitly does NOT support.
 # These components have no label-verified counterpart on this file; pages must
 # degrade honestly rather than fabricate them. (internet_access and
-# income_pressure ARE reproducible via C14A4/EF7.)
+# income_pressure and income bands ARE reproducible via C14A4/EF7/N4A/N4B.)
 SPSS_WITHHELD = (
     "financial_stress", "owns_money", "saves_regularly", "social_safety_net",
     "phone_ownership", "microinsurance", "has_pension", "emergency_difficult",

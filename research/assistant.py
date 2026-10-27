@@ -481,6 +481,53 @@ def _explain_indicator(
     return "\n".join(parts), tuple(references), numeric
 
 
+def _income_expenses_answer(
+    frame: pd.DataFrame | None,
+    profile: SourceProfile | None,
+    source_label: str,
+    lens_note: str,
+) -> tuple[str, tuple[EvidenceReference, ...], bool]:
+    """Answer broad income/expenses questions from the approved context measures."""
+
+    parts = [
+        "In this project, income and expenses are represented mainly through income pressure: "
+        "whether reported income covers living costs monthly or more often.",
+        "The dashboard also reports self-reported monthly personal income and annual income bands as context.",
+    ]
+    references = [
+        EvidenceReference("FI-05", INDICATORS["FI-05"].title, INDICATORS["FI-05"].unit),
+        _page_reference("Poverty insights"),
+    ]
+    numeric = False
+    if frame is not None:
+        pressure, _unavailable = _live_fi_result(frame, "FI-05")
+        if pressure is not None:
+            parts.append(
+                f"{_lens_prefix(lens_note)}Income pressure is {_format_share(pressure.estimate)} "
+                f"({pressure.numerator_n:,} of {pressure.denominator_n:,} valid respondents)."
+            )
+            numeric = True
+        for estimate_id in ("EI-01", "EI-02", "EI-03"):
+            try:
+                context = calculate_context_estimate(frame, estimate_id)
+            except (KeyError, ValueError):
+                continue
+            definition = CONTEXT_ESTIMATES[estimate_id]
+            parts.append(f"{definition.title}: {_format_share(context['estimate'])}.")
+            references.append(EvidenceReference(estimate_id, definition.title, definition.unit))
+            numeric = True
+    parts.append(
+        "The supplied analytical slice does not contain a complete household expenditure or "
+        "consumption aggregate. These are financial-context measures, not an official poverty rate "
+        "or poverty gap."
+    )
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None:
+        references.append(dataset)
+        parts.append(f"Source: {_dataset_line(profile, source_label)}.")
+    return "\n".join(parts), tuple(references), numeric
+
+
 def _provenance(
     indicator_id: str,
     frame: pd.DataFrame | None,
@@ -1051,11 +1098,19 @@ def _classify(text: str) -> str:
         return "poverty_blockers"
     if re.search(r"what is insight ?rwanda|tell me about (this|the) (project|app|product|platform)", low):
         return "identity"
+<<<<<<< HEAD
     if re.search(
         r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|"
         r"how (is|was|were|are).{0,60}(calculat|comput|derive)",
         low,
     ) and (project_context or _THIS_REFERENCE.search(low) or "reported" in low):
+=======
+    if re.search(r"\b(income|earnings)\b", low) and re.search(
+        r"\b(expenses?|expenditure|costs?|spend(?:ing)?|money left|living costs)\b", low
+    ):
+        return "income_expenses"
+    if re.search(r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|how (is|was|were|are).{0,60}(calculat|comput|derive)", low):
+>>>>>>> 792c2dc (commited by dna)
         return "estimate_provenance"
     if re.search(r"is (this|that|it|the).{0,30}official", low):
         return "estimate_provenance"
@@ -1163,6 +1218,12 @@ def answer_question(
     if kind == "source_evidence":
         text, references = _source_evidence(frame, profile, source_label)
         return AssistantAnswer(kind, text, references)
+
+    if kind == "income_expenses":
+        text, references, numeric = _income_expenses_answer(
+            frame, profile, source_label, lens_note
+        )
+        return AssistantAnswer(kind, text, references, numeric_verified=numeric, applied_lens=lens_note)
 
     if kind == "page_narrative":
         # Page questions win over alias matching ("the Financial inclusion page" is

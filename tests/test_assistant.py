@@ -166,6 +166,14 @@ class VerifiedNumberTests(AssistantUnitTestBase):
         truth = calculate_context_estimate(self.frame, "EI-01")["estimate"]
         self.assertIn(f"{truth * 100:.1f}%", answer.answer)
 
+    def test_income_and_expenses_question_returns_context_analytics(self):
+        answer = self.ask("How are income and expenses represented?")
+        self.assertEqual(answer.question_kind, "income_expenses")
+        self.assertTrue(answer.numeric_verified)
+        self.assertIn("Income pressure", answer.answer)
+        self.assertIn("monthly personal income", answer.answer)
+        self.assertIn("not an official poverty rate", answer.answer)
+
     def test_provenance_carries_the_live_number_at_the_current_lens(self):
         answer = self.ask("Where did this percentage come from?")
         truth = calculate_indicator(self.frame, "FI-01")

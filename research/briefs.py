@@ -28,7 +28,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .catalog import SourceProfile, _analysis_version, aggregate_release_allowed
 from .data_pipeline import PROVINCES
-from .estimation import CONTEXT_ESTIMATES, calculate_context_estimate, official_poverty_status
+from .estimation import (
+    CONTEXT_ESTIMATES,
+    MONTHLY_INCOME,
+    calculate_context_estimate,
+    context_weight_distribution,
+    official_poverty_status,
+)
 from .indicators import INDICATORS, calculate_indicator
 from .quality import QualityCheck, run_quality_checks
 
@@ -169,20 +175,34 @@ def _build_overview(view: pd.DataFrame, profile: SourceProfile | None) -> PageBr
 
 def _build_financial_inclusion(view: pd.DataFrame, profile: SourceProfile | None) -> PageBrief:
     rows = tuple(_fi_rows(view))
+    try:
+        income_distribution = context_weight_distribution(view, MONTHLY_INCOME)
+    except (KeyError, ValueError):
+        income_distribution = pd.Series(dtype=float)
+    if income_distribution.empty or float(income_distribution.sum()) <= 0:
+        income_kpi = ("Most common monthly income range", NA, "not available on the active source or lens")
+        income_note = "No verified monthly income-band distribution is available on the active source or lens."
+    else:
+        income_share = income_distribution / income_distribution.sum()
+        income_label = str(income_share.idxmax())
+        income_value = _pct(float(income_share.max()))
+        income_kpi = ("Most common monthly income range", income_value, income_label)
+        income_note = f"The most common self-reported monthly income range is {income_label} ({income_value})."
     return PageBrief(
         page="Financial inclusion",
         eyebrow="02 / Indicator registry",
         title="Brief — Financial inclusion indicators",
         narrative=(
-            "The six verified indicators (FI-01…FI-06) with weighted estimates and the "
-            "indicator-specific denominators behind each rate."
+            "The six verified indicators (FI-01…FI-06) with weighted estimates, the "
+            "indicator-specific denominators behind each rate, and income-range context. "
+            + income_note
         ),
         caution=(
             "Missing, unexpected and non-substantive responses are excluded from each "
-            "denominator — never counted as negative responses. Definitions are in the "
-            "registry on the app page."
+            "denominator — never counted as negative responses. Income bands are self-reported "
+            "context, not a poverty rate. Definitions are in the registry on the app page."
         ),
-        kpis=rows,
+        kpis=rows + (income_kpi,),
         lens_note=_lens(view),
         footer_lines=_footer(profile),
     )

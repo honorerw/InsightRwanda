@@ -18,10 +18,18 @@ from research.spss_pipeline import (
 )
 from research.data_pipeline import (
     ANALYSIS_COLUMNS as PIPELINE_COLUMNS,
+    INCOME_BAND_ANNUAL,
+    INCOME_BAND_MONTHLY,
     aggregate_weighted_measure,
     enrich_analysis_data as pipeline_enrich_analysis_data,
     filter_analysis_data as pipeline_filter_analysis_data,
     load_analysis_data as pipeline_load_analysis_data,
+)
+from research.estimation import (
+    ANNUAL_INCOME,
+    CONTEXT_ESTIMATES,
+    MONTHLY_INCOME,
+    calculate_context_estimate,
 )
 from research.modeling import (
     ModelRecord,
@@ -786,6 +794,21 @@ def metric_card(label: str, value: str, foot: str, icon: str, color: str = "gree
     )
 
 
+def table_height(frame: pd.DataFrame, maximum: int = 420) -> int:
+    """Fit a Streamlit table to its rows without leaving a blank trailing row."""
+
+    rows = len(frame.index)
+    return min(maximum, max(76, 42 + 35 * rows))
+
+
+def dataframe_fit(frame: pd.DataFrame, **kwargs: object) -> None:
+    """Render a dataframe at its content height, capped by any requested height."""
+
+    requested_height = int(kwargs.pop("height", 420))
+    kwargs["height"] = table_height(frame, maximum=requested_height)
+    st.dataframe(frame, **kwargs)
+
+
 def section_head(title: str, note: str = "") -> None:
     st.markdown(f'<div class="section-head"><div><div class="section-title">{title}</div><div class="section-note">{note}</div></div></div>', unsafe_allow_html=True)
 
@@ -825,6 +848,66 @@ def weighted_distribution(frame: pd.DataFrame, category: str) -> pd.Series:
     if valid.sum() == 0:
         return pd.Series(dtype=float)
     return frame.loc[valid].groupby(category)["hh_wt"].sum()
+
+
+def income_band_table(frame: pd.DataFrame, column: str, labels: dict[int, str]) -> pd.DataFrame:
+    """Return the weighted income-band distribution for an active lens."""
+
+    columns = ["Income range", "Weighted share", "Valid n"]
+    if column not in frame or "hh_wt" not in frame:
+        return pd.DataFrame(columns=columns)
+    valid = (
+        frame[column].isin(labels)
+        & frame["hh_wt"].notna()
+        & frame["hh_wt"].gt(0)
+        & np.isfinite(frame["hh_wt"])
+    )
+    if not valid.any():
+        return pd.DataFrame(columns=columns)
+    weights = frame.loc[valid].groupby(column)["hh_wt"].sum()
+    counts = frame.loc[valid].groupby(column).size()
+    total_weight = float(weights.sum())
+    rows = [
+        {
+            "Income range": labels[code],
+            "Weighted share": float(weights.get(code, 0.0) / total_weight),
+            "Valid n": int(counts.get(code, 0)),
+        }
+        for code in labels
+        if code in weights.index
+    ]
+    return pd.DataFrame(rows, columns=columns)
+
+
+def vulnerability_screen(frame: pd.DataFrame, group: str) -> pd.DataFrame:
+    """Rank groups by observed financial-vulnerability signals, not poverty status."""
+
+    if group not in frame:
+        return pd.DataFrame()
+    proxy = frame.copy()
+    measures: dict[str, str] = {}
+    if "income_pressure" in proxy:
+        measures["Income pressure"] = "income_pressure"
+    if "n11" in proxy:
+        monthly = proxy["n11"].where(proxy["n11"].isin(range(1, 17)))
+        proxy["low_monthly_income"] = monthly.isin([1, 2]).astype(float).mask(monthly.isna())
+        measures["Low monthly income"] = "low_monthly_income"
+    if "emergency_difficult" in proxy:
+        measures["Emergency money difficult"] = "emergency_difficult"
+    if "emergency_fund" in proxy:
+        emergency = proxy["emergency_fund"]
+        proxy["no_emergency_fund"] = emergency.eq(0).astype(float).mask(emergency.isna())
+        measures["No emergency fund"] = "no_emergency_fund"
+    if not measures:
+        return pd.DataFrame()
+    result = None
+    for label, measure in measures.items():
+        grouped = weighted_group(proxy, group, measure)[["group", "value"]].rename(columns={"value": label})
+        result = grouped if result is None else result.merge(grouped, on="group", how="outer")
+    component_columns = list(measures)
+    result["Signals used"] = result[component_columns].notna().sum(axis=1)
+    result["Vulnerability signal"] = result[component_columns].mean(axis=1, skipna=True)
+    return result.sort_values("Vulnerability signal", ascending=False).reset_index(drop=True)
 
 
 def band_flag(frame: pd.DataFrame, band: str) -> pd.Series:
@@ -871,7 +954,7 @@ def render_model_evaluation_tab(view: pd.DataFrame) -> None:
     left, right = st.columns([1.15, .85])
     with left:
         st.markdown('<div class="section-title">Candidate comparison, cross-validated</div><div class="section-note">5-fold group-stratified CV · weighted F1 and ROC-AUC · mean ± sd</div>', unsafe_allow_html=True)
-        st.dataframe(record.fold_metrics_table, hide_index=True, width="stretch", height=150)
+        dataframe_fit(record.fold_metrics_table, hide_index=True, width="stretch", height=150)
     with right:
         m = record.metrics
         metric_left, metric_right = st.columns(2)
@@ -907,7 +990,7 @@ def render_model_evaluation_tab(view: pd.DataFrame) -> None:
         st.plotly_chart(chart_theme(fig, min(380, 56 * len(importance) + 40)), width="stretch", config={"displayModeBar": False})
     with imp_right:
         st.markdown('<div class="section-title">Calibration on the held-out fold</div><div class="section-note">Predicted vs observed Priority share per probability quantile</div>', unsafe_allow_html=True)
-        st.dataframe(record.calibration_table, hide_index=True, width="stretch", height=150)
+        dataframe_fit(record.calibration_table, hide_index=True, width="stretch", height=150)
         cm = record.confusion
         st.caption(
             f"Held-out fold: {record.n_test:,} records ({record.households_test:,} unique respondent keys), unweighted confusion counts "
@@ -980,7 +1063,7 @@ def render_threshold_tradeoff(view: pd.DataFrame, record: ModelRecord) -> None:
 
     trade_left, trade_right = st.columns([1.1, .9])
     with trade_left:
-        st.dataframe(threshold_metrics(table), hide_index=True, width="stretch", height=230)
+        dataframe_fit(threshold_metrics(table), hide_index=True, width="stretch", height=230)
         st.caption("Word of caution: pick the operating threshold from programme costs and capacity, not from the highest number alone.")
     with trade_right:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
@@ -1012,7 +1095,7 @@ def render_subgroup_performance(view: pd.DataFrame, record: ModelRecord) -> None
         format_func=lambda item: item[0],
         key="subgroup_dimension",
     )
-    st.dataframe(subgroup_performance(table, dimension[1]), hide_index=True, width="stretch", height=280)
+    dataframe_fit(subgroup_performance(table, dimension[1]), hide_index=True, width="stretch", height=280)
 
 
 def render_predictive_insights(df: pd.DataFrame) -> None:
@@ -1051,7 +1134,7 @@ def measure_detail_dialog(view: pd.DataFrame, measure: str, label: str) -> None:
     if breakdown.empty:
         st.info("No records match this measure in the current lens. Widen the filters and try again.")
         return
-    st.dataframe(
+    dataframe_fit(
         breakdown.assign(share=breakdown["value"].map(lambda v: pct(v, 1)))[["group", "share", "numerator_n", "denominator_n"]]
         .rename(columns={"group": "Province", "share": "Share", "numerator_n": "Yes (n)", "denominator_n": "Scored (n)"}),
         hide_index=True,
@@ -1177,6 +1260,70 @@ def _indicator_results(view: pd.DataFrame) -> dict[str, object | None]:
     return results
 
 
+def render_financial_indicator_analytics(results: dict[str, object | None]) -> None:
+    """Render the indicator chart and selected-indicator detail panel."""
+
+    section_head(
+        "Financial inclusion evidence",
+        "Weighted estimates from the active source · no survey-design standard errors are shown",
+    )
+    available_chart = [indicator_id for indicator_id in INDICATORS if results[indicator_id] is not None]
+    left, right = st.columns([1.05, .95])
+    with left:
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        names = [results[indicator_id].definition.title for indicator_id in available_chart]
+        values = [results[indicator_id].estimate * 100 for indicator_id in available_chart]
+        colors = ["#3155d4", "#5274e6", "#e5ae2f", "#de7c3f", "#d95362", "#7182a8"]
+        fig = go.Figure(
+            go.Bar(
+                x=values,
+                y=names,
+                orientation="h",
+                marker_color=colors,
+                text=[f"{value:.1f}%" for value in values],
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+            )
+        )
+        fig.update_xaxes(range=[0, 108], ticksuffix="%")
+        fig.update_yaxes(autorange="reversed")
+        st.plotly_chart(chart_theme(fig, 350), width="stretch", config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+    with right:
+        selected = st.selectbox(
+            "Inspect indicator",
+            list(INDICATORS),
+            format_func=lambda indicator_id: f"{indicator_id} · {INDICATORS[indicator_id].title}",
+            key="indicator_detail",
+        )
+        result = results[selected]
+        if result is None:
+            st.markdown(
+                f'<div class="chart-card"><div class="eyebrow">{selected} · indicator card</div>'
+                f'<div class="section-title" style="font-size:1.08rem">{INDICATORS[selected].title}</div>'
+                f'<p class="section-note" style="font-size:.8rem;line-height:1.5">{INDICATORS[selected].definition}</p>'
+                '<div class="callout"><strong>Not available on this wave.</strong> The survey questions '
+                "this indicator needs were not asked here, so the estimate is withheld rather than "
+                "approximated or imputed.</div></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            definition = result.definition
+            st.markdown(
+                f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div>'
+                f'<div class="section-title" style="font-size:1.08rem">{definition.title}</div>'
+                f'<p class="section-note" style="font-size:.8rem;line-height:1.5">{definition.definition}</p>'
+                f'<div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div>'
+                f'<div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · '
+                f'weighted population sum {result.weight_sum:,.0f}</div>'
+                f'<div class="callout"><strong>Calculation.</strong> {definition.method}<br><br>'
+                f'<strong>Source variables.</strong> {", ".join(definition.source_variables)}<br><br>'
+                f'<strong>Limitation.</strong> {" ".join(definition.limitations)}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+
 def render_cross_source_agreement() -> None:
     """Honest agreement view between the two supplied sources (cached loads)."""
 
@@ -1199,8 +1346,72 @@ def render_cross_source_agreement() -> None:
         agreement["Both present"] = agreement.apply(
             lambda r: r["2024 wave"] not in ("not reproducible",) and r["2020 wave"] not in ("not reproducible",), axis=1
         )
-        st.dataframe(agreement, hide_index=True, width="stretch", height=260)
+        dataframe_fit(agreement, hide_index=True, width="stretch", height=260)
         st.caption("The two waves asked different people slightly different questions — treat large gaps as differences between the surveys, not as errors.")
+
+
+def render_poverty_cross_source_comparison() -> None:
+    """Compare poverty-context measures across the two supplied survey waves."""
+
+    section_head(
+        "Poverty context across the two survey waves",
+        "2024 Stata and 2020 SPSS estimates shown side by side · waves are not merged",
+    )
+    measures = (
+        ("FI-05", INDICATORS["FI-05"].title),
+        ("FI-03", INDICATORS["FI-03"].title),
+        ("EI-01", CONTEXT_ESTIMATES["EI-01"].title),
+        ("EI-02", CONTEXT_ESTIMATES["EI-02"].title),
+        ("EI-03", CONTEXT_ESTIMATES["EI-03"].title),
+    )
+    frames = (("2024 wave", load_master_frame()), ("2020 wave", load_spss_workload(SPSS_PATH)))
+    rows = []
+    chart_rows = []
+    for measure_id, label in measures:
+        estimates: dict[str, float | None] = {}
+        for wave, frame in frames:
+            try:
+                if measure_id in INDICATORS:
+                    estimate = calculate_indicator(frame, measure_id).estimate
+                else:
+                    estimate = float(calculate_context_estimate(frame, measure_id)["estimate"])
+                estimates[wave] = float(estimate)
+            except (KeyError, ValueError):
+                estimates[wave] = None
+        wave_2024 = estimates["2024 wave"]
+        wave_2020 = estimates["2020 wave"]
+        if wave_2024 is None or wave_2020 is None:
+            continue
+        rows.append({
+            "ID": measure_id,
+            "Measure": label,
+            "2024 wave": pct(wave_2024, 1),
+            "2020 wave": pct(wave_2020, 1),
+            "Gap (2024 − 2020)": f"{(wave_2024 - wave_2020) * 100:+.1f} pp",
+        })
+        chart_rows.append({"Measure": label, "2024 wave": wave_2024, "2020 wave": wave_2020})
+    comparison_table = pd.DataFrame(rows)
+    dataframe_fit(comparison_table, hide_index=True, width="stretch", height=260)
+    comparison_chart = pd.DataFrame(chart_rows)
+    if not comparison_chart.empty:
+        fig = go.Figure()
+        for wave, color in (("2024 wave", "#3155d4"), ("2020 wave", "#e5ae2f")):
+            fig.add_trace(go.Bar(
+                x=comparison_chart["Measure"],
+                y=comparison_chart[wave] * 100,
+                name=wave,
+                marker_color=color,
+                hovertemplate=f"%{{x}} · {wave}: %{{y:.1f}}%<extra></extra>",
+            ))
+        fig.update_layout(barmode="group")
+        fig.update_yaxes(range=[0, max(10, float(comparison_chart[["2024 wave", "2020 wave"]].to_numpy().max() * 100 + 8))], ticksuffix="%")
+        st.plotly_chart(chart_theme(fig, max(280, 45 * len(comparison_chart) + 90), legend=True), width="stretch", config={"displayModeBar": False})
+    st.caption(
+        "The table includes only measures with a label-verified counterpart in both waves. "
+        "The 2020 file has no equivalent to the 2024 emergency-money-difficulty question, so comparable "
+        "emergency-fund coverage is shown instead. Differences are descriptive wave comparisons, not trends, "
+        "causal effects or official poverty estimates."
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -1263,7 +1474,7 @@ def render_combined_relationships() -> None:
         for column in (master_label, spss_label, "Pooled (equal source weight)"):
             display[column] = display[column].map(lambda value: pct(value, 1))
         display["Gap (pp)"] = display["Gap (pp)"].map(lambda value: f"{value:+.1f}" if pd.notna(value) else "—")
-        st.dataframe(display, hide_index=True, width="stretch", height=300)
+        dataframe_fit(display, hide_index=True, width="stretch", height=300)
         st.markdown('</div>', unsafe_allow_html=True)
     with right:
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
@@ -1305,7 +1516,7 @@ def render_combined_prediction() -> None:
         key="combined_target",
     )
     table = transport_workload(target)
-    st.dataframe(
+    dataframe_fit(
         table.drop(columns=["Note"]),
         hide_index=True,
         width="stretch",
@@ -1341,6 +1552,7 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
     if not has_data(view):
         return
     results = _indicator_results(view)
+    chart_is_empty = not any(result is not None for result in results.values())
     card_ids = ["FI-01", "FI-02", "FI-03", "FI-04"]
     cards = st.columns(4)
     card_styles = [("green", "↗"), ("green", "⌁"), ("yellow", "◌"), ("rose", "!")]
@@ -1351,86 +1563,131 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
                 metric_card(INDICATORS[indicator_id].title, "—", "not asked on this wave", "⊘", "rose", delay=index)
             else:
                 metric_card(result.definition.title, pct(result.estimate), f"n={result.denominator_n:,} valid respondents", icon, color, delay=index)
-
-    section_head("Financial inclusion evidence", "Weighted estimates from the active source · no survey-design standard errors are shown")
-    available_chart = [i for i in INDICATORS if results[i] is not None]
-    chart_is_empty = not available_chart
-    left, right = st.columns([1.05, .95])
-    with left:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        names = [results[i].definition.title for i in available_chart]
-        values = [results[i].estimate * 100 for i in available_chart]
-        colors = ["#3155d4", "#5274e6", "#e5ae2f", "#de7c3f", "#d95362", "#7182a8"]
-        fig = go.Figure(go.Bar(x=values, y=names, orientation="h", marker_color=colors, text=[f"{v:.1f}%" for v in values], textposition="outside", cliponaxis=False, hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
-        fig.update_xaxes(range=[0, 108], ticksuffix="%")
-        fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(chart_theme(fig, 350), width="stretch", config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
-    with right:
-        selected = st.selectbox("Inspect indicator", list(INDICATORS), format_func=lambda x: f"{x} · {INDICATORS[x].title}", key="indicator_detail")
-        result = results[selected]
-        if result is None:
-            missing_vars = ", ".join(INDICATORS[selected].source_variables)
+    indicator_tab, income_tab, overview_tab = st.tabs(["Indicator analytics", "Income range", "Overview"])
+    with indicator_tab:
+        render_financial_indicator_analytics(results)
+    with income_tab:
+        income_ranges = {
+            "Monthly personal income": (MONTHLY_INCOME, INCOME_BAND_MONTHLY),
+            "Annual total income": (ANNUAL_INCOME, INCOME_BAND_ANNUAL),
+        }
+        income_basis = st.selectbox(
+            "Income range to analyse",
+            list(income_ranges),
+            key="financial_income_basis",
+            help="Choose the self-reported income-band variable used for the distribution below.",
+        )
+        income_column, income_labels = income_ranges[income_basis]
+        income_table = income_band_table(view, income_column, income_labels)
+        if income_table.empty:
+            metric_card("Income range", "—", "not available on this wave", "⊘", "rose")
+        else:
+            top_income = income_table.loc[income_table["Weighted share"].idxmax()]
+            metric_card(
+                "Income range",
+                pct(float(top_income["Weighted share"])),
+                f"most common {income_basis.lower()} band: {top_income['Income range']}",
+                "¤",
+                "orange",
+            )
+        section_head(
+            "Income-range analytics",
+            f"Weighted distribution of self-reported {income_basis.lower()} bands among valid responses",
+        )
+        if income_table.empty:
             st.markdown(
-                f'<div class="chart-card"><div class="eyebrow">{selected} · indicator card</div><div class="section-title" style="font-size:1.08rem">{INDICATORS[selected].title}</div><p class="section-note" style="font-size:.8rem;line-height:1.5">{INDICATORS[selected].definition}</p><div class="callout"><strong>Not available on this wave.</strong> The survey questions this indicator needs were not asked here, so the estimate is withheld rather than approximated or imputed.</div></div>',
+                '<div class="callout"><strong>Income ranges are unavailable on this source or lens.</strong> '
+                "The missing bands are not imputed or substituted.</div>",
                 unsafe_allow_html=True,
             )
         else:
-            definition = result.definition
-            st.markdown(
-                f'<div class="chart-card"><div class="eyebrow">{definition.indicator_id} · indicator card</div><div class="section-title" style="font-size:1.08rem">{definition.title}</div><p class="section-note" style="font-size:.8rem;line-height:1.5">{definition.definition}</p><div class="metric-value" style="color:#172554">{pct(result.estimate, 1)}</div><div class="section-note">{result.numerator_n:,} positive records / {result.denominator_n:,} valid records · weighted population sum {result.weight_sum:,.0f}</div><div class="callout"><strong>Calculation.</strong> {definition.method}<br><br><strong>Source variables.</strong> {', '.join(definition.source_variables)}<br><br><strong>Limitation.</strong> {' '.join(definition.limitations)}</div></div>',
-                unsafe_allow_html=True,
-            )
+            income_left, income_right = st.columns([1.15, .85])
+            with income_left:
+                fig = go.Figure(
+                    go.Bar(
+                        y=income_table["Income range"],
+                        x=income_table["Weighted share"] * 100,
+                        orientation="h",
+                        marker_color="#e5ae2f",
+                        text=[f"{value * 100:.1f}%" for value in income_table["Weighted share"]],
+                        textposition="outside",
+                        cliponaxis=False,
+                        hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                    )
+                )
+                fig.update_xaxes(
+                    range=[0, max(10, float(income_table["Weighted share"].max() * 100 + 8))],
+                    ticksuffix="%",
+                )
+                fig.update_yaxes(autorange="reversed")
+                st.plotly_chart(
+                    chart_theme(fig, max(300, 28 * len(income_table) + 70)),
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+            with income_right:
+                display_income = income_table.copy()
+                display_income["Weighted share"] = display_income["Weighted share"].map(lambda value: pct(value, 1))
+                dataframe_fit(display_income, hide_index=True, width="stretch", height=360)
+                top_income = income_table.loc[income_table["Weighted share"].idxmax()]
+                st.markdown(
+                    f'<div class="callout"><strong>Summary.</strong> The most common reported '
+                    f'{income_basis.lower()} range is <strong>{top_income["Income range"]}</strong> '
+                    f'at <strong>{pct(float(top_income["Weighted share"]), 1)}</strong> of valid responses. '
+                    "This is income context, not a poverty rate: bands are self-reported and exclude missing or refused responses.</div>",
+                    unsafe_allow_html=True,
+                )
 
-    access_result = results.get("FI-01")
-    buffer_result = results.get("FI-03")
-    pressure_result = results.get("FI-05")
-    section_head("What the indicators reveal", "The inclusion problem is a capability gap, not only a channel gap")
-    interpretation_cards = []
-    if access_result is not None:
-        interpretation_cards.append(
-            ("Reach", pct(access_result.estimate), f"{access_result.denominator_n:,} valid responses show whether formal finance currently reaches respondents.")
-        )
-    if access_result is not None and buffer_result is not None:
-        interpretation_cards.append(
-            ("Access–buffer gap", f"{(access_result.estimate - buffer_result.estimate) * 100:.0f} pp", "Formal access is much broader than emergency-fund coverage; usage should not be read as resilience.")
-        )
-    if pressure_result is not None:
-        interpretation_cards.append(
-            ("Daily pressure", pct(pressure_result.estimate), "Income-pressure responses show why households may struggle to turn access into savings capacity.")
-        )
-    insight_cols = st.columns(max(1, len(interpretation_cards)))
-    for col, (title, value, note) in zip(insight_cols, interpretation_cards):
-        with col:
-            st.markdown(
-                f'<div class="insight-card"><div class="insight-kicker">{title}</div><div class="insight-text">{value}</div><div class="insight-foot">{note}</div></div>',
-                unsafe_allow_html=True,
+    with overview_tab:
+        access_result = results.get("FI-01")
+        buffer_result = results.get("FI-03")
+        pressure_result = results.get("FI-05")
+        section_head("What the indicators reveal", "The inclusion problem is a capability gap, not only a channel gap")
+        interpretation_cards = []
+        if access_result is not None:
+            interpretation_cards.append(
+                ("Reach", pct(access_result.estimate), f"{access_result.denominator_n:,} valid responses show whether formal finance currently reaches respondents.")
             )
-    st.caption(
-        "Each estimate uses its own valid-response denominator. Missing or unverified responses are excluded, "
-        "so differences between indicators are analytical signals rather than proof that the same respondents answered every question."
-    )
+        if access_result is not None and buffer_result is not None:
+            interpretation_cards.append(
+                ("Access–buffer gap", f"{(access_result.estimate - buffer_result.estimate) * 100:.0f} pp", "Formal access is much broader than emergency-fund coverage; usage should not be read as resilience.")
+            )
+        if pressure_result is not None:
+            interpretation_cards.append(
+                ("Daily pressure", pct(pressure_result.estimate), "Income-pressure responses show why households may struggle to turn access into savings capacity.")
+            )
+        insight_cols = st.columns(max(1, len(interpretation_cards)))
+        for col, (title, value, note) in zip(insight_cols, interpretation_cards):
+            with col:
+                st.markdown(
+                    f'<div class="insight-card"><div class="insight-kicker">{title}</div><div class="insight-text">{value}</div><div class="insight-foot">{note}</div></div>',
+                    unsafe_allow_html=True,
+                )
+        st.caption(
+            "Each estimate uses its own valid-response denominator. Missing or unverified responses are excluded, "
+            "so differences between indicators are analytical signals rather than proof that the same respondents answered every question."
+        )
 
-    section_head("Indicator registry", "The research contract behind the dashboard")
-    registry = pd.DataFrame([
-        {
-            "ID": definition.indicator_id,
-            "Indicator": definition.title,
-            "Definition": definition.definition,
-            "Unit": definition.unit,
-            "Valid responses": definition.valid_response_rule,
-            "Source variables": ", ".join(definition.source_variables),
-            "Verification": definition.verification,
-        }
-        for definition in INDICATORS.values()
-    ])
-    st.dataframe(registry, hide_index=True, width="stretch", height=315)
-    registry_footnote = f'Source profile: {profile.source_variables:,} variables in the original source file · {profile.rows:,} records loaded · release and population period are not documented in the supplied materials.'
-    st.markdown(f'<div class="footer-note">{registry_footnote}</div>', unsafe_allow_html=True)
-    if chart_is_empty:
-        st.markdown('<div class="footer-note">The active source cannot support any of the six documented indicators; the chart region above is intentionally empty rather than approximated.</div>', unsafe_allow_html=True)
-    render_cross_source_agreement()
-    render_combined_relationships()
+        section_head("Indicator registry", "The research contract behind the dashboard")
+        registry = pd.DataFrame([
+            {
+                "ID": definition.indicator_id,
+                "Indicator": definition.title,
+                "Definition": definition.definition,
+                "Unit": definition.unit,
+                "Valid responses": definition.valid_response_rule,
+                "Source variables": ", ".join(definition.source_variables),
+                "Verification": definition.verification,
+            }
+            for definition in INDICATORS.values()
+        ])
+        dataframe_fit(registry, hide_index=True, width="stretch", height=315)
+        registry_footnote = f'Source profile: {profile.source_variables:,} variables in the original source file · {profile.rows:,} records loaded · release and population period are not documented in the supplied materials.'
+        st.markdown(f'<div class="footer-note">{registry_footnote}</div>', unsafe_allow_html=True)
+        if chart_is_empty:
+            st.markdown('<div class="footer-note">The active source cannot support any of the six documented indicators; the chart region above is intentionally empty rather than approximated.</div>', unsafe_allow_html=True)
+        render_cross_source_agreement()
+        render_combined_relationships()
 
 
 def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
@@ -1440,52 +1697,27 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         "The supplied file contains useful financial-stress and income-context questions, but this workspace does not include a documented official poverty measure, welfare aggregate, poverty line, or estimation methodology. No poverty rate is fabricated here.",
     )
     st.markdown('<div class="callout"><strong>Research status: blocked for an official poverty estimate.</strong><br>The source can support exploratory context on income pressure and emergency liquidity, but not a defensible poverty classification or poverty rate without the missing methodology and variables.</div>', unsafe_allow_html=True)
-    section_head("Exact blockers", "These are actionable research dependencies, not dashboard errors")
-    blockers = pd.DataFrame([
-        ["Poverty concept", "No documented national/international poverty line or welfare concept is supplied."],
-        ["Welfare aggregate", "The selected source slice has self-reported personal income bands, but no verified household consumption or welfare aggregate."],
-        ["Survey methodology", "No sampling, strata, PSU, calibration or variance-estimation documentation is available in the workspace."],
-        ["Authorization", "The file is present and inspected, but no authorization record for public poverty reporting was supplied."],
-    ], columns=["Dependency", "Evidence status"])
-    st.dataframe(blockers, hide_index=True, width="stretch")
-
-    section_head("What is available as non-poverty context", "These are genuine estimates, clearly labelled as financial stress indicators")
     view = filter_bar(df, "poverty_context")
     if not has_data(view):
         return
-    pressure_results = _indicator_results(view)
-    pressure = pressure_results["FI-05"]
-    difficulty = pressure_results["FI-04"]
-    a, b = st.columns(2)
-    with a:
-        if pressure is None:
-            metric_card("Income pressure", "—", "not asked on this wave", "⊘", "rose")
-        else:
-            metric_card("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange")
-    with b:
-        if difficulty is None:
-            metric_card("Emergency money is difficult", "—", "not asked on this wave", "⊘", "rose", delay=1)
-        else:
-            metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
+    overview_tab, context_tab = st.tabs(["Overview", "Income context"])
 
-    section_head("What this says about the problem", "Financial strain is visible here; poverty status is not")
-    problem_lines = []
-    if pressure is not None:
-        problem_lines.append(
-            f"<strong>{pct(pressure.estimate)}</strong> report that income does not cover living costs monthly or more often."
-        )
-    if difficulty is not None:
-        problem_lines.append(
-            f"<strong>{pct(difficulty.estimate)}</strong> say raising 56,000 Rwf within the next month would be very or somewhat difficult."
-        )
-    if problem_lines:
-        st.markdown(
-            '<div class="callout"><strong>Evidence interpretation.</strong><br>'
-            + "<br>".join(problem_lines)
-            + "<br><br>Read together, these measures describe limited room to absorb a shock. They can guide questions about savings, liquidity and social protection, but they do not identify who is below a poverty line, how far below it they are, or whether a household is chronically poor.</div>",
-            unsafe_allow_html=True,
-        )
+    with context_tab:
+        section_head("What is available as non-poverty context", "These are genuine estimates, clearly labelled as financial stress indicators")
+        pressure_results = _indicator_results(view)
+        pressure = pressure_results["FI-05"]
+        difficulty = pressure_results["FI-04"]
+        context_cards = []
+        if pressure is not None:
+            context_cards.append(("Income pressure", pct(pressure.estimate), "not an official poverty measure", "≈", "orange"))
+        if difficulty is not None:
+            context_cards.append(("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow"))
+        context_columns = st.columns(max(1, len(context_cards)))
+        for slot, (label, value, foot, icon, color) in zip(context_columns, context_cards):
+            with slot:
+                metric_card(label, value, foot, icon, color)
 
+<<<<<<< HEAD
     geo_measures = []
     if "income_pressure" in view:
         geo_measures.append(
@@ -1498,26 +1730,237 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
             weighted_group(view, "province", "emergency_difficult")
             .drop(columns="numerator_n")
             .rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+=======
+        context_plot = []
+        if pressure is not None:
+            context_plot.append(("Income pressure", float(pressure.estimate)))
+        if difficulty is not None:
+            context_plot.append(("Emergency money difficult", float(difficulty.estimate)))
+        if context_plot:
+            section_head("Income-stress analytics", "Weighted shares from the active survey view")
+            fig = go.Figure(
+                go.Bar(
+                    x=[value * 100 for _label, value in context_plot],
+                    y=[label for label, _value in context_plot],
+                    orientation="h",
+                    marker_color=["#de7c3f", "#e5ae2f"],
+                    text=[f"{value * 100:.1f}%" for _label, value in context_plot],
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                )
+            )
+            fig.update_xaxes(range=[0, max(10, max(value for _label, value in context_plot) * 100 + 8)], ticksuffix="%")
+            fig.update_yaxes(autorange="reversed")
+            st.plotly_chart(chart_theme(fig, 230), width="stretch", config={"displayModeBar": False})
+
+        income_ranges = {
+            "Monthly personal income": (MONTHLY_INCOME, INCOME_BAND_MONTHLY),
+            "Annual total income": (ANNUAL_INCOME, INCOME_BAND_ANNUAL),
+        }
+        income_basis = st.selectbox(
+            "Income range to plot",
+            list(income_ranges),
+            key="poverty_income_basis",
         )
-    if geo_measures:
-        section_head("Geographic context", "Where financial pressure is more concentrated — not a poverty ranking")
-        pressure_geo = geo_measures[0]
-        for measure_geo in geo_measures[1:]:
-            pressure_geo = pressure_geo.merge(measure_geo, on="group", how="outer")
-        sort_column = "income_pressure" if "income_pressure" in pressure_geo else "emergency_difficult"
-        pressure_geo = pressure_geo.sort_values(sort_column, ascending=False)
-        display_geo = pressure_geo.rename(columns={"group": "Province"}).copy()
-        if "income_pressure" in display_geo:
-            display_geo["Income pressure"] = display_geo["income_pressure"].map(pct)
-        if "emergency_difficult" in display_geo:
-            display_geo["Emergency money difficult"] = display_geo["emergency_difficult"].map(pct)
-        columns = ["Province"]
-        columns += [c for c in ("Income pressure", "Emergency money difficult") if c in display_geo]
-        st.dataframe(display_geo[columns], hide_index=True, width="stretch")
-        st.caption(
-            "The table compares reported financial pressure across provinces. It is descriptive and weighted; "
-            "it does not replace the missing poverty line, welfare aggregate or survey-design documentation."
+        income_column, income_labels = income_ranges[income_basis]
+        income_table = income_band_table(view, income_column, income_labels)
+        if not income_table.empty:
+            section_head("Income-range distribution", f"Weighted {income_basis.lower()} bands among valid responses")
+            fig = go.Figure(
+                go.Bar(
+                    x=income_table["Weighted share"] * 100,
+                    y=income_table["Income range"],
+                    orientation="h",
+                    marker_color="#7182a8",
+                    text=[f"{value * 100:.1f}%" for value in income_table["Weighted share"]],
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                )
+            )
+            fig.update_xaxes(range=[0, max(10, float(income_table["Weighted share"].max() * 100 + 8))], ticksuffix="%")
+            fig.update_yaxes(autorange="reversed")
+            st.plotly_chart(chart_theme(fig, max(280, 28 * len(income_table) + 70)), width="stretch", config={"displayModeBar": False})
+
+        section_head("What this says about the problem", "Financial strain is visible here; poverty status is not")
+        problem_lines = []
+        if pressure is not None:
+            problem_lines.append(
+                f"<strong>{pct(pressure.estimate)}</strong> report that income does not cover living costs monthly or more often."
+            )
+        if difficulty is not None:
+            problem_lines.append(
+                f"<strong>{pct(difficulty.estimate)}</strong> say raising 56,000 Rwf within the next month would be very or somewhat difficult."
+            )
+        if problem_lines:
+            st.markdown(
+                '<div class="callout"><strong>Evidence interpretation.</strong><br>'
+                + "<br>".join(problem_lines)
+                + "<br><br>Read together, these measures describe limited room to absorb a shock. They can guide questions about savings, liquidity and social protection, but they do not identify who is below a poverty line, how far below it they are, or whether a household is chronically poor.</div>",
+                unsafe_allow_html=True,
+            )
+
+    with overview_tab:
+        poverty_results = _indicator_results(view)
+        pressure_result = poverty_results.get("FI-05")
+        difficulty_result = poverty_results.get("FI-04")
+        context_results: dict[str, dict[str, object] | None] = {}
+        for estimate_id in CONTEXT_ESTIMATES:
+            try:
+                context_results[estimate_id] = calculate_context_estimate(view, estimate_id)
+            except (KeyError, ValueError):
+                context_results[estimate_id] = None
+
+        summary_values = []
+        if pressure_result is not None:
+            summary_values.append(("Income pressure", pct(pressure_result.estimate), "financial-stress context, not poverty", "≈", "orange"))
+        if difficulty_result is not None:
+            summary_values.append(("Emergency money difficult", pct(difficulty_result.estimate), "self-reported liquidity context", "◌", "yellow"))
+        if context_results.get("EI-01") is not None:
+            summary_values.append(("Low monthly income", pct(float(context_results["EI-01"]["estimate"])), "lowest two reported bands", "¤", "rose"))
+        if context_results.get("EI-03") is not None:
+            summary_values.append(("Low annual income", pct(float(context_results["EI-03"]["estimate"])), "lowest two reported bands", "¤", "rose"))
+        summary_cards = st.columns(max(1, len(summary_values)))
+        for slot, (label, value, foot, icon, color) in zip(summary_cards, summary_values):
+            with slot:
+                metric_card(label, value, foot, icon, color)
+
+        provincial_pressure = weighted_group(view, "province", "income_pressure")
+        provincial_pressure = provincial_pressure.dropna(subset=["value"])
+        geographic_result = (
+            f"{(provincial_pressure['value'].max() - provincial_pressure['value'].min()) * 100:.1f} pp range"
+            if len(provincial_pressure) >= 2 else "Not available"
+>>>>>>> 792c2dc (commited by dna)
         )
+        access_buffer_result = "Not available"
+        if "active_access" in view and "emergency_fund" in view:
+            access_buffer_result = f"{(weighted_rate(view, view['active_access']) - weighted_rate(view, view['emergency_fund'])) * 100:.1f} pp"
+        internet_gap = "Not available"
+        if "internet_access" in view:
+            internet_gap = f"{(1 - weighted_rate(view, view['internet_access'])) * 100:.1f}% lack internet"
+        wave_pressure = []
+        for source_frame in (load_master_frame(), load_spss_workload(SPSS_PATH)):
+            try:
+                wave_pressure.append(float(calculate_indicator(source_frame, "FI-05").estimate))
+            except (KeyError, ValueError):
+                pass
+        trend_result = f"{(wave_pressure[0] - wave_pressure[1]) * 100:+.1f} pp income-pressure change" if len(wave_pressure) == 2 else "Not available"
+        current_rows = []
+        if geographic_result != "Not available":
+            current_rows.append(["Geographic inequality", geographic_result, "Range of provincial income pressure; descriptive context, not a poverty-rate spread."])
+        if access_buffer_result != "Not available":
+            current_rows.append(["Financial inclusion gap", access_buffer_result, "Active-access minus emergency-fund coverage; not a poverty gap."])
+        if internet_gap != "Not available":
+            current_rows.append(["Basic-services gap", internet_gap, "Internet-access context only; no complete essential-services basket is defined."])
+        if trend_result != "Not available":
+            current_rows.append(["Poverty trend", trend_result, "Income-pressure comparison across the two waves; not a poverty-rate trend."])
+        current_analytics = pd.DataFrame(current_rows, columns=["Indicator", "Current numeric result", "Analytic interpretation"])
+        if not current_analytics.empty:
+            section_head("Current poverty analytics", "Numbers available from the supplied files")
+            dataframe_fit(current_analytics[["Indicator", "Current numeric result"]], hide_index=True, width="stretch")
+            chart_points = []
+            if pressure_result is not None:
+                chart_points.append(("Income pressure", float(pressure_result.estimate)))
+            if difficulty_result is not None:
+                chart_points.append(("Emergency money difficult", float(difficulty_result.estimate)))
+            if context_results.get("EI-01") is not None:
+                chart_points.append(("Low monthly income", float(context_results["EI-01"]["estimate"])))
+            if context_results.get("EI-03") is not None:
+                chart_points.append(("Low annual income", float(context_results["EI-03"]["estimate"])))
+            if chart_points:
+                section_head("Poverty-context analytics", "Weighted shares from the active survey view")
+                fig = go.Figure(
+                    go.Bar(
+                        x=[value * 100 for _label, value in chart_points],
+                        y=[label for label, _value in chart_points],
+                        orientation="h",
+                        marker_color=["#de7c3f", "#e5ae2f", "#d95362", "#7182a8"],
+                        text=[f"{value * 100:.1f}%" for _label, value in chart_points],
+                        textposition="outside",
+                        cliponaxis=False,
+                        hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                    )
+                )
+                fig.update_xaxes(range=[0, max(10, max(value for _label, value in chart_points) * 100 + 8)], ticksuffix="%")
+                fig.update_yaxes(autorange="reversed")
+                st.plotly_chart(chart_theme(fig, max(240, 55 * len(chart_points) + 70)), width="stretch", config={"displayModeBar": False})
+
+        risk_screen_group = st.selectbox(
+            "Rank groups by observed vulnerability signals",
+            [("Province", "province"), ("District", "district")],
+            format_func=lambda option: option[0],
+            key="poverty_risk_group",
+        )
+        risk_screen = vulnerability_screen(view, risk_screen_group[1])
+        if not risk_screen.empty:
+            section_head(
+                "Groups with higher financial-vulnerability signals",
+                "A screening aid based on observed survey responses — not a poverty prediction",
+            )
+            plot_left, table_right = st.columns([1.15, 0.85])
+            with plot_left:
+                plot_screen = risk_screen.head(12).sort_values("Vulnerability signal")
+                fig = go.Figure(
+                    go.Bar(
+                        x=plot_screen["Vulnerability signal"] * 100,
+                        y=plot_screen["group"].astype(str),
+                        orientation="h",
+                        marker_color="#d95362",
+                        text=[f"{value * 100:.1f}%" for value in plot_screen["Vulnerability signal"]],
+                        textposition="outside",
+                        cliponaxis=False,
+                        hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                    )
+                )
+                maximum = float(plot_screen["Vulnerability signal"].max() * 100)
+                fig.update_xaxes(range=[0, max(10, maximum + 8)], ticksuffix="%")
+                fig.update_yaxes(autorange=True)
+                st.plotly_chart(
+                    chart_theme(fig, max(280, 34 * len(plot_screen) + 70)),
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+            with table_right:
+                display_screen = risk_screen[["group", "Vulnerability signal", "Signals used"]].copy()
+                display_screen["Vulnerability signal"] = display_screen["Vulnerability signal"].map(pct)
+                display_screen = display_screen.rename(columns={"group": "Group"})
+                dataframe_fit(display_screen, hide_index=True, width="stretch")
+            st.caption(
+                "Higher values mean a larger average share across the available financial-vulnerability signals. "
+                "This does not identify households below a poverty line, predict official poverty status, or establish causality."
+            )
+        geo_measures = []
+        if "income_pressure" in view:
+            geo_measures.append(
+                weighted_group(view, "province", "income_pressure")[['group', 'value']]
+                .rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
+            )
+        if "emergency_difficult" in view:
+            geo_measures.append(
+                weighted_group(view, "province", "emergency_difficult")[['group', 'value']]
+                .rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+            )
+        if geo_measures:
+            section_head("Geographic context", "Where financial pressure is more concentrated — not a poverty ranking")
+            pressure_geo = geo_measures[0]
+            for measure_geo in geo_measures[1:]:
+                pressure_geo = pressure_geo.merge(measure_geo, on="group", how="outer")
+            sort_column = "income_pressure" if "income_pressure" in pressure_geo else "emergency_difficult"
+            pressure_geo = pressure_geo.sort_values(sort_column, ascending=False)
+            display_geo = pressure_geo.rename(columns={"group": "Province"}).copy()
+            if "income_pressure" in display_geo:
+                display_geo["Income pressure"] = display_geo["income_pressure"].map(pct)
+            if "emergency_difficult" in display_geo:
+                display_geo["Emergency money difficult"] = display_geo["emergency_difficult"].map(pct)
+            columns = ["Province"]
+            columns += [c for c in ("Income pressure", "Emergency money difficult") if c in display_geo]
+            dataframe_fit(display_geo[columns], hide_index=True, width="stretch")
+            st.caption(
+                "The table compares reported financial pressure across provinces. It is descriptive and weighted; "
+                "it does not replace the missing poverty line, welfare aggregate or survey-design documentation."
+            )
+        render_poverty_cross_source_comparison()
 
 
 def render_regional(df: pd.DataFrame) -> None:
@@ -1586,6 +2029,7 @@ def render_regional(df: pd.DataFrame) -> None:
     )
 
     section_head("District explorer", "Sorted by active formal access · filter the geography above to zoom in")
+<<<<<<< HEAD
     district_table = weighted_group(view, "district", "active_access").drop(columns="numerator_n").rename(columns={"value": "active_access", "denominator_n": "active_n"})
     district_emergency = weighted_group(view, "district", "emergency_fund").drop(columns="numerator_n").rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
     district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
@@ -1594,6 +2038,16 @@ def render_regional(df: pd.DataFrame) -> None:
         district_table = district_table.merge(district_pressure, on="group", how="left")
     if "emergency_difficult" in view:
         district_difficulty = weighted_group(view, "district", "emergency_difficult").drop(columns="numerator_n").rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+=======
+    district_table = weighted_group(view, "district", "active_access")[['group', 'value', 'denominator_n']].rename(columns={"value": "active_access", "denominator_n": "active_n"})
+    district_emergency = weighted_group(view, "district", "emergency_fund")[['group', 'value', 'denominator_n']].rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
+    district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
+    if "income_pressure" in view:
+        district_pressure = weighted_group(view, "district", "income_pressure")[['group', 'value', 'denominator_n']].rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
+        district_table = district_table.merge(district_pressure, on="group", how="left")
+    if "emergency_difficult" in view:
+        district_difficulty = weighted_group(view, "district", "emergency_difficult")[['group', 'value', 'denominator_n']].rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+>>>>>>> 792c2dc (commited by dna)
         district_table = district_table.merge(district_difficulty, on="group", how="left")
     dleft, dright = st.columns([1.4, .6])
     with dleft:
@@ -1607,7 +2061,7 @@ def render_regional(df: pd.DataFrame) -> None:
         display_columns = ["group", "Active access", "Emergency fund"]
         display_columns += [column for column in ("Income pressure", "Emergency money difficult") if column in display_table]
         display_columns += ["active_n", "emergency_n"]
-        st.dataframe(
+        dataframe_fit(
             display_table[display_columns].rename(
                 columns={"group": "District", "active_n": "Access n", "emergency_n": "Emergency n"}
             ),
@@ -1819,7 +2273,7 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     if not aggregate.empty:
         aggregate["estimate"] = aggregate["estimate"].map(lambda x: pct(x, 1))
         aggregate = aggregate.rename(columns={"province": "Province", "district": "District", "setting": "Setting", "sex": "Respondent sex", "records": "Records", "weight_sum": "Weight sum", "estimate": label})
-    st.dataframe(aggregate, hide_index=True, width="stretch", height=340)
+    dataframe_fit(aggregate, hide_index=True, width="stretch", height=340)
     st.markdown('<div class="callout"><strong>Privacy and publication control.</strong><br>Household-level records and raw CSV export are disabled because no authorization or disclosure/publication approval record was supplied. The table above is an aggregate analytical view only.</div>', unsafe_allow_html=True)
     aggregate_csv = aggregate.to_csv(index=False).encode("utf-8") if not aggregate.empty else b""
     st.download_button("Download aggregate summary (approval required)", aggregate_csv, file_name="insightrwanda_aggregate_summary.csv", mime="text/csv", type="secondary", disabled=True if profile is None else profile.publication_status != "Approved", help="Unavailable while the source profile records no authorization and publication approval. Hovering the callout above shows the current gate state in detail.")
@@ -1843,7 +2297,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
         {"Status": check.status, "Category": check.category, "Check": check.check_id, "Finding": check.finding}
         for check in checks
     ])
-    st.dataframe(quality_table, hide_index=True, width="stretch", height=355)
+    dataframe_fit(quality_table, hide_index=True, width="stretch", height=355)
 
     section_head("Core-variable missingness", "Missing responses are excluded from each indicator denominator; no imputation is performed")
     missing_cols = ["qf4_05", "e9b", "e9c", "e7", "c14_5", "b2", "a1", "a2"]
@@ -1856,20 +2310,6 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
         st.plotly_chart(chart_theme(fig, 300), width="stretch", config={"displayModeBar": False})
     with right:
         st.markdown(f'<div class="callout"><strong>Scope.</strong><br><br>{profile.source_variables:,} source variables were inventoried. This dashboard loads {profile.analytical_variables:,} documented analytical variables, plus derived labels and indicators.<br><br><strong>Important.</strong><br><br>A clean load, unique key and valid codes do not prove that the survey is representative or that an official statistic can be published.</div>', unsafe_allow_html=True)
-
-    if missing_values:
-        most_missing_column, most_missing_value = max(missing_values, key=lambda item: item[1])
-        section_head("What quality means for the problem", "Coverage determines which questions can be answered with confidence")
-        st.markdown(
-            f'<div class="callout"><strong>{most_missing_column} has the highest missingness in this analytical slice at {most_missing_value:.1f}%.</strong> '
-            f"That is why every indicator reports its own valid denominator and why the dashboard does not impute a missing answer. "
-            f"The current file contains {len(df):,} loaded rows, {summary['PASS']} passing checks, {summary['WARN']} warnings and {summary['FAIL']} blocking failures. "
-            "These checks protect the calculation chain; they do not certify representativeness, poverty measurement or publication readiness.</div>",
-            unsafe_allow_html=True,
-        )
-
-    section_head("Quality limitations", "What remains outside the executed checks")
-    st.markdown('<div class="chart-card"><div class="section-note" style="font-size:.8rem;line-height:1.65">The workspace does not contain the fieldwork protocol, sample design, questionnaire version, enumerator quality controls, non-response adjustments, geographic boundary release, disclosure review, or an approved publication record. These should be supplied before an official public research release.</div></div>', unsafe_allow_html=True)
 
 
 def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
@@ -1888,7 +2328,7 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
             ["Release / period", profile.source_release], ["Metadata", profile.metadata_status], ["Analysis", profile.analysis_status],
             ["Authorization", profile.authorization_status], ["Publication", profile.publication_status],
         ]
-        st.dataframe(pd.DataFrame(source_rows, columns=["Field", "Status / value"]), hide_index=True, width="stretch", height=405)
+        dataframe_fit(pd.DataFrame(source_rows, columns=["Field", "Status / value"]), hide_index=True, width="stretch", height=405)
         st.markdown('</div>', unsafe_allow_html=True)
     with right:
         st.markdown('<div class="chart-card"><div class="eyebrow">Evidence chain</div><div class="section-title" style="font-size:1.12rem">Five steps, one audit trail</div>', unsafe_allow_html=True)
@@ -1922,12 +2362,12 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
     )
 
     section_head("Available source materials", "What was actually found in the workspace")
-    st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded survey variable and value labels"]}), hide_index=True, width="stretch")
+    dataframe_fit(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded survey variable and value labels"]}), hide_index=True, width="stretch")
     st.markdown('<div class="callout"><strong>Governance boundary.</strong><br>The application distinguishes file existence, metadata inspection, permitted analysis, validation and public publication. The supplied workspace contains no authorization or publication approval record, so the app is suitable for internal analysis and demonstration, not an approved public statistical release.</div>', unsafe_allow_html=True)
 
     section_head("Indicator methodology", "Verified source mapping for the current financial-inclusion slice")
     method_rows = [{"ID": d.indicator_id, "Definition": d.definition, "Valid responses": d.valid_response_rule, "Calculation": d.method, "Limitations": " ".join(d.limitations)} for d in INDICATORS.values()]
-    st.dataframe(pd.DataFrame(method_rows), hide_index=True, width="stretch", height=320)
+    dataframe_fit(pd.DataFrame(method_rows), hide_index=True, width="stretch", height=320)
     st.markdown(f'<div class="footer-note">Quality checks executed: {len(checks)} · source profile is cached from the supplied file · original research materials remain unchanged.</div>', unsafe_allow_html=True)
 
 
@@ -2035,7 +2475,7 @@ def render_about(df: pd.DataFrame) -> None:
         ["If access expands without buffers", "Formal usage may rise while financial fragility remains; access alone should not be treated as poverty reduction."],
         ["What the model can add", "The tested model can rank observed households by Priority likelihood for follow-up, but it cannot forecast future rates or prove that an intervention caused improvement."],
     ], columns=["Scenario", "Expected direction"])
-    st.dataframe(outlook, hide_index=True, width="stretch")
+    dataframe_fit(outlook, hide_index=True, width="stretch")
     st.info("The supplied workspace contains cross-sectional survey waves, not a longitudinal outcome series. Future quantities therefore need follow-up survey waves or programme monitoring before they can be forecast numerically.")
 
     section_head("Hackathon alignment", "How the prototype answers the judging criteria")
@@ -2046,7 +2486,7 @@ def render_about(df: pd.DataFrame) -> None:
         ["Usability + design", "Custom navigation, responsive layout, plain-language narrative and downloadable evidence."],
         ["Tangible impact", "Surfaces where to strengthen buffers, assisted digital access and shock-responsive finance."],
     ], columns=["Criterion", "Prototype response"])
-    st.dataframe(criteria, hide_index=True, width="stretch")
+    dataframe_fit(criteria, hide_index=True, width="stretch")
     st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
 
 
@@ -2178,7 +2618,7 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
         "begin with \"Approved\". Current state:</p>",
         unsafe_allow_html=True,
     )
-    st.dataframe(pd.DataFrame([
+    dataframe_fit(pd.DataFrame([
         ["Authorization record", profile.authorization_status],
         ["Publication record", profile.publication_status],
         ["Gate state", "Open" if released else "Closed — household preview, raw export and aggregate tables withheld"],
@@ -2520,7 +2960,7 @@ def _ask_render_message(message: dict[str, object]) -> None:
                 )
                 counts["Weighted share"] = [f"{share * 100:.1f}%" for _group_name, share in chart.rows]
                 with st.expander("Numbers behind this chart", expanded=False):
-                    st.dataframe(counts, hide_index=True, use_container_width=True)
+                    dataframe_fit(counts, hide_index=True, use_container_width=True)
                 st.caption("Verified: weighted with the survey's household weight on the active "
                            "source and lens, exactly like every dashboard figure. Bars sorted "
                            "highest to lowest share.")
@@ -2745,7 +3185,7 @@ def load_combined_profile() -> SourceProfile:
         documentation=("2026 Hackathon Competition.pdf", "Embedded Stata and SPSS variable/value labels"),
         notes=(
             "The two files share no record key; the combined dataset stacks them as two independent samples on the harmonized variables.",
-            "Measures with no counterpart on the SPSS wave (own money, saving behaviour, social support, income bands) stay missing there and are never imputed.",
+            "Measures with no counterpart on the SPSS wave (own money, saving behaviour and social support) stay missing there and are never imputed; labeled income bands are harmonized from N4A/N4B.",
             "The dashboard does not expose household-level records by default and does not publish the combined file.",
         ),
     )

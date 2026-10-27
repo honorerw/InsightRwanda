@@ -45,6 +45,8 @@ def write_synthetic_sav(path: str, n: int = 40, seed: int = 5) -> None:
             "B0": float(rng.choice([1, 2])),
             "B1": float(rng.integers(16, 90)),
             "B2": float(rng.choice([1, 2])),
+            "N4A": float(rng.integers(1, 15)),
+            "N4B": float(rng.integers(1, 15)),
             **{f"QF5_{j:02d}": float(rng.choice([1, 2, 3], p=[.45, .45, .1])) for j in range(1, 11)},
             "EF9": float(rng.choice([1, 2, 3], p=[.4, .5, .1])),
         })
@@ -82,7 +84,7 @@ class SpssLoaderFixtureTests(unittest.TestCase):
 
     def test_rename_maps_documented_subset_only(self):
         for column in ("key", "hh_wt", "pop_wt", "hh_size", "province", "district",
-                       "setting", "sex", "active_access", "mobile_money", "emergency_fund"):
+                       "setting", "sex", "n11", "n12", "active_access", "mobile_money", "emergency_fund"):
             self.assertIn(column, self.frame.columns)
         for column in SPSS_WITHHELD:
             self.assertNotIn(column, self.frame.columns)
@@ -149,6 +151,10 @@ class SpssRealSourceTests(unittest.TestCase):
         self.assertGreater(r.estimate, 0.0)
         with self.assertRaises(ValueError):
             calculate_indicator(self.frame, "FI-04")
+
+    def test_income_bands_are_recovered_from_labeled_n4_fields(self):
+        self.assertTrue(self.frame["n11"].dropna().between(1, 16).all())
+        self.assertTrue(self.frame["n12"].dropna().between(1, 14).all())
 
 
 if __name__ == "__main__":
