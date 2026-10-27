@@ -51,7 +51,10 @@ from research.joint import (
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import AssistantChart, MAX_QUESTION_LENGTH, answer_question, answer_with_chart
 from research.assistant_llm import (
+<<<<<<< HEAD
     answer_general_with_status,
+=======
+>>>>>>> 682a4c9 (commited by dna)
     get_configured_provider,
     refine_answer_with_status,
 )
@@ -313,9 +316,8 @@ button[kind="secondary"] { border-radius:9px; border-color:#cbd5ee; color:var(--
 
 .footer-note { color:#5f6866; font-size:.7rem; padding-top:1.7rem; border-top:1px solid var(--line); margin-top:2.5rem; line-height:1.5; }
 button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, sans-serif; }
-/* InsightRwanda AI Assistant — floating launcher + in-screen panel.
-   Fixed positioning keeps it out of page flow, so charts, tables, the sidebar
-   and the Streamlit toolbar are never pushed or hidden. */
+/* Fixed positioning keeps the floating panel out of page flow, so charts,
+   tables, the sidebar and the Streamlit toolbar are never pushed or hidden. */
 /* Mobile navigation Menu pill — a fixed control shown only on phones, where the
    rail becomes a drawer. On desktop the element is removed from flow entirely. */
 .st-key-mobile_menu_open { display:none; }
@@ -460,6 +462,18 @@ def weighted_rate(frame: pd.DataFrame, values: pd.Series, weights: str = "hh_wt"
     return float(np.average(values[valid], weights=frame.loc[valid, weights]))
 
 
+def weighted_coverage(frame: pd.DataFrame, valid_values: pd.Series, weights: str = "hh_wt") -> float:
+    """Weighted share of rows covered by a supplied validity mask."""
+
+    if weights not in frame:
+        return float("nan")
+    valid_weights = frame[weights].notna() & frame[weights].gt(0) & np.isfinite(frame[weights])
+    if valid_weights.sum() == 0:
+        return float("nan")
+    mask = valid_values.fillna(False).astype(bool) & valid_weights
+    return float(frame.loc[mask, weights].sum() / frame.loc[valid_weights, weights].sum())
+
+
 def pct(value: float, decimals: int = 0) -> str:
     return "—" if pd.isna(value) else f"{value * 100:.{decimals}f}%"
 
@@ -502,9 +516,6 @@ def app_header() -> None:
         on_click=_open_mobile_menu,
         help="Open the navigation drawer",
     )
-    # The AI Assistant lives in a fixed launcher rendered at the end of main(),
-    # so it never consumes page space and opens without leaving this screen.
-
 
 NAV_ICONS = {
     "Overview": ":material/dashboard:",
@@ -612,7 +623,7 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
         "Methods & sources", "About the build",
     ]
     nav_groups = [
-        ("Evidence", nav_pages[:6], "What the survey data shows"),
+        ("", nav_pages[:6], ""),
         ("Governance", nav_pages[6:8], "Checks, access and data protection"),
         ("How it is built", nav_pages[8:], "Methods, sources and background"),
     ]
@@ -639,18 +650,18 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
                 on_click=_toggle_sidebar,
                 help="Collapse or expand the sidebar",
             )
-        st.markdown('<div class="side-label">Dataset</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-label">Survey year</div>', unsafe_allow_html=True)
         st.selectbox(
             "Survey year",
             list(YEAR_OPTIONS),
             key="survey_year",
             help="Choose which survey wave the whole dashboard shows: 2020, 2024, or both together.",
+            label_visibility="collapsed",
         )
-        st.markdown('<div class="side-caption">Scopes every page — charts, tables, briefs and the assistant all follow this choice.</div>', unsafe_allow_html=True)
         for group_label, group_pages, group_hint in nav_groups:
-            st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="side-caption">{group_hint}</div>', unsafe_allow_html=True)
+            if group_label:
+                st.markdown(f'<div class="side-label">{group_label}</div>', unsafe_allow_html=True)
+            if group_hint:
+                st.markdown(f'<div class="side-caption">{group_hint}</div>', unsafe_allow_html=True)
             for page in group_pages:
                 pressed = st.button(
                     f"{numbers[page]} · {page}",
@@ -763,7 +774,7 @@ def has_data(frame: pd.DataFrame) -> bool:
     if frame.empty:
         st.warning(
             "No records match the filters you chose.\n\n"
-            "Widen one filter at a time: set **Survey year** (left sidebar) back to *All years* and **Province** back to *All provinces*, "
+            "Widen one filter at a time: set the year filter (left sidebar) back to *All years* and **Province** back to *All provinces*, "
             "then adjust **District**, **Setting** and **Respondent sex** until records appear."
         )
         return False
@@ -875,6 +886,16 @@ def render_model_evaluation_tab(view: pd.DataFrame) -> None:
             st.metric("Base rate (weighted)", f"{m['base_rate']:.1%}")
             st.metric("Holdout precision / recall", f"{m['weighted_precision']:.3f} / {m['weighted_recall']:.3f}")
             st.metric("Brier score", f"{m['brier']:.3f}")
+
+    top_feature = max(record.permutation_importance.items(), key=lambda item: abs(item[1])) if record.permutation_importance else None
+    section_head("What the model can—and cannot—add", "A ranking aid for follow-up, not a poverty or eligibility decision")
+    if top_feature is not None:
+        st.markdown(
+            f'<div class="callout"><strong>Observed Priority share: {m["base_rate"]:.1%}; held-out ROC-AUC: {m["roc_auc"]:.3f}.</strong> '
+            f"The largest held-out permutation signal is {top_feature[0]} (AUC change {top_feature[1]:+.3f}). "
+            "This tells us how well the available variables rank the observed resilience band in this sample; it does not prove that the feature causes vulnerability, forecast future poverty, or justify automatic programme decisions.</div>",
+            unsafe_allow_html=True,
+        )
 
     imp_left, imp_right = st.columns([1.1, .9])
     with imp_left:
@@ -1130,6 +1151,21 @@ def render_overview(df: pd.DataFrame) -> None:
     with c:
         st.markdown(f'<div class="insight-card"><div class="insight-kicker">Signal 03 · digital</div><div class="insight-text">{pct(1 - weighted_rate(view, view["internet_access"]))} lack internet access.</div><div class="insight-foot">Digital-first interventions need a low-bandwidth or assisted pathway to avoid excluding rural and lower-income users.</div></div>', unsafe_allow_html=True)
 
+    both_valid = view["income_pressure"].notna() & view["emergency_fund"].notna()
+    pressure_without_buffer = weighted_rate(
+        view,
+        (view["income_pressure"].eq(1) & view["emergency_fund"].eq(0)).astype(float).where(both_valid),
+    )
+    access_buffer_gap = active - emergency
+    section_head("The problem in one line", "High channel access does not yet translate into household shock capacity")
+    st.markdown(
+        f'<div class="callout"><strong>{pct(access_buffer_gap, 0)} percentage-point access–buffer gap.</strong> '
+        f"Formal access reaches {pct(active)}, while emergency-fund coverage reaches only {pct(emergency)}. "
+        f"Among respondents with both answers observed, {pct(pressure_without_buffer)} report income pressure and no emergency fund. "
+        "This is the operational problem the dashboard is designed to help target; it is not an official poverty classification.</div>",
+        unsafe_allow_html=True,
+    )
+
 
 
 def _indicator_results(view: pd.DataFrame) -> dict[str, object | None]:
@@ -1349,6 +1385,35 @@ def render_financial_inclusion(df: pd.DataFrame, profile: SourceProfile) -> None
                 unsafe_allow_html=True,
             )
 
+    access_result = results.get("FI-01")
+    buffer_result = results.get("FI-03")
+    pressure_result = results.get("FI-05")
+    section_head("What the indicators reveal", "The inclusion problem is a capability gap, not only a channel gap")
+    interpretation_cards = []
+    if access_result is not None:
+        interpretation_cards.append(
+            ("Reach", pct(access_result.estimate), f"{access_result.denominator_n:,} valid responses show whether formal finance currently reaches respondents.")
+        )
+    if access_result is not None and buffer_result is not None:
+        interpretation_cards.append(
+            ("Access–buffer gap", f"{(access_result.estimate - buffer_result.estimate) * 100:.0f} pp", "Formal access is much broader than emergency-fund coverage; usage should not be read as resilience.")
+        )
+    if pressure_result is not None:
+        interpretation_cards.append(
+            ("Daily pressure", pct(pressure_result.estimate), "Income-pressure responses show why households may struggle to turn access into savings capacity.")
+        )
+    insight_cols = st.columns(max(1, len(interpretation_cards)))
+    for col, (title, value, note) in zip(insight_cols, interpretation_cards):
+        with col:
+            st.markdown(
+                f'<div class="insight-card"><div class="insight-kicker">{title}</div><div class="insight-text">{value}</div><div class="insight-foot">{note}</div></div>',
+                unsafe_allow_html=True,
+            )
+    st.caption(
+        "Each estimate uses its own valid-response denominator. Missing or unverified responses are excluded, "
+        "so differences between indicators are analytical signals rather than proof that the same respondents answered every question."
+    )
+
     section_head("Indicator registry", "The research contract behind the dashboard")
     registry = pd.DataFrame([
         {
@@ -1406,6 +1471,55 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
         else:
             metric_card("Emergency money is difficult", pct(difficulty.estimate), "self-reported liquidity stress", "◌", "yellow", delay=1)
 
+    section_head("What this says about the problem", "Financial strain is visible here; poverty status is not")
+    problem_lines = []
+    if pressure is not None:
+        problem_lines.append(
+            f"<strong>{pct(pressure.estimate)}</strong> report that income does not cover living costs monthly or more often."
+        )
+    if difficulty is not None:
+        problem_lines.append(
+            f"<strong>{pct(difficulty.estimate)}</strong> say raising 56,000 Rwf within the next month would be very or somewhat difficult."
+        )
+    if problem_lines:
+        st.markdown(
+            '<div class="callout"><strong>Evidence interpretation.</strong><br>'
+            + "<br>".join(problem_lines)
+            + "<br><br>Read together, these measures describe limited room to absorb a shock. They can guide questions about savings, liquidity and social protection, but they do not identify who is below a poverty line, how far below it they are, or whether a household is chronically poor.</div>",
+            unsafe_allow_html=True,
+        )
+
+    geo_measures = []
+    if "income_pressure" in view:
+        geo_measures.append(
+            weighted_group(view, "province", "income_pressure")
+            .rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
+        )
+    if "emergency_difficult" in view:
+        geo_measures.append(
+            weighted_group(view, "province", "emergency_difficult")
+            .rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+        )
+    if geo_measures:
+        section_head("Geographic context", "Where financial pressure is more concentrated — not a poverty ranking")
+        pressure_geo = geo_measures[0]
+        for measure_geo in geo_measures[1:]:
+            pressure_geo = pressure_geo.merge(measure_geo, on="group", how="outer")
+        sort_column = "income_pressure" if "income_pressure" in pressure_geo else "emergency_difficult"
+        pressure_geo = pressure_geo.sort_values(sort_column, ascending=False)
+        display_geo = pressure_geo.rename(columns={"group": "Province"}).copy()
+        if "income_pressure" in display_geo:
+            display_geo["Income pressure"] = display_geo["income_pressure"].map(pct)
+        if "emergency_difficult" in display_geo:
+            display_geo["Emergency money difficult"] = display_geo["emergency_difficult"].map(pct)
+        columns = ["Province"]
+        columns += [c for c in ("Income pressure", "Emergency money difficult") if c in display_geo]
+        st.dataframe(display_geo[columns], hide_index=True, width="stretch")
+        st.caption(
+            "The table compares reported financial pressure across provinces. It is descriptive and weighted; "
+            "it does not replace the missing poverty line, welfare aggregate or survey-design documentation."
+        )
+
 
 def render_regional(df: pd.DataFrame) -> None:
     page_intro(
@@ -1443,21 +1557,81 @@ def render_regional(df: pd.DataFrame) -> None:
         st.plotly_chart(chart_theme(fig, 340, True), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
+    section_head("What the geography says", "The main gap is between financial access and the ability to absorb a shock")
+    lowest_access = table.iloc[0] if len(table) else None
+    lowest_buffer = table.dropna(subset=["emergency"]).sort_values("emergency").iloc[0] if table["emergency"].notna().any() else None
+    widest_gap = table.dropna(subset=["gap"]).sort_values("gap", ascending=False).iloc[0] if table["gap"].notna().any() else None
+    geographic_signals = []
+    if lowest_access is not None:
+        geographic_signals.append(
+            ("Lowest access", f"{lowest_access['group']} · {pct(lowest_access['value'])}", "The lowest-access province is the first place to inspect for reach and delivery barriers.")
+        )
+    if lowest_buffer is not None:
+        geographic_signals.append(
+            ("Thinnest buffer", f"{lowest_buffer['group']} · {pct(lowest_buffer['emergency'])}", "A low emergency-fund share means access expansion alone may not improve shock absorption.")
+        )
+    if widest_gap is not None:
+        geographic_signals.append(
+            ("Largest access–buffer gap", f"{widest_gap['group']} · {widest_gap['gap']:.0%}", "This is the clearest signal for pairing financial access with savings or liquidity support.")
+        )
+    signal_cols = st.columns(max(1, len(geographic_signals)))
+    for col, (title, value, note) in zip(signal_cols, geographic_signals):
+        with col:
+            st.markdown(
+                f'<div class="insight-card"><div class="insight-kicker">{title}</div><div class="insight-text">{value}</div><div class="insight-foot">{note}</div></div>',
+                unsafe_allow_html=True,
+            )
+    st.caption(
+        "Geographic differences are signals for targeting and investigation. They are not causal explanations, "
+        "poverty classifications or proof that one province performs better because of a specific intervention."
+    )
+
     section_head("District explorer", "Sorted by active formal access · filter the geography above to zoom in")
     district_table = weighted_group(view, "district", "active_access").rename(columns={"value": "active_access", "denominator_n": "active_n"})
     district_emergency = weighted_group(view, "district", "emergency_fund").rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
     district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
+    if "income_pressure" in view:
+        district_pressure = weighted_group(view, "district", "income_pressure").rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
+        district_table = district_table.merge(district_pressure, on="group", how="left")
+    if "emergency_difficult" in view:
+        district_difficulty = weighted_group(view, "district", "emergency_difficult").rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+        district_table = district_table.merge(district_difficulty, on="group", how="left")
     dleft, dright = st.columns([1.4, .6])
     with dleft:
         display_table = district_table.copy()
         display_table["Active access"] = display_table["active_access"].map(pct)
         display_table["Emergency fund"] = display_table["emergency_fund"].map(pct)
-        st.dataframe(display_table[["group", "Active access", "active_n", "Emergency fund", "emergency_n"]].rename(columns={"group": "District", "active_n": "Access n", "emergency_n": "Emergency n"}), hide_index=True, width="stretch", height=300)
+        if "income_pressure" in display_table:
+            display_table["Income pressure"] = display_table["income_pressure"].map(pct)
+        if "emergency_difficult" in display_table:
+            display_table["Emergency money difficult"] = display_table["emergency_difficult"].map(pct)
+        display_columns = ["group", "Active access", "Emergency fund"]
+        display_columns += [column for column in ("Income pressure", "Emergency money difficult") if column in display_table]
+        display_columns += ["active_n", "emergency_n"]
+        st.dataframe(
+            display_table[display_columns].rename(
+                columns={"group": "District", "active_n": "Access n", "emergency_n": "Emergency n"}
+            ),
+            hide_index=True,
+            width="stretch",
+            height=300,
+        )
     with dright:
         best = district_table.iloc[0] if len(district_table) else None
         worst = district_table.iloc[-1] if len(district_table) else None
         if best is not None and worst is not None:
-            st.markdown(f'<div class="callout"><strong>Decision cue.</strong><br><br>{best["group"]} leads this filtered view on active access at {pct(best["active_access"])}.<br><br>{worst["group"]} is the lowest at {pct(worst["active_access"])}; pair financial access expansion with a buffer-building offer.</div>', unsafe_allow_html=True)
+            cue = (
+                f"<strong>Decision cue.</strong><br><br>{best['group']} leads this filtered view on active access at "
+                f"{pct(best['active_access'])}.<br><br>{worst['group']} is the lowest at "
+                f"{pct(worst['active_access'])}; pair financial access expansion with a buffer-building offer."
+            )
+            if "income_pressure" in district_table and district_table["income_pressure"].notna().any():
+                pressure_peak = district_table.loc[district_table["income_pressure"].idxmax()]
+                cue += (
+                    f"<br><br>{pressure_peak['group']} has the highest income pressure in this view at "
+                    f"{pct(pressure_peak['income_pressure'])}; treat that as a financial-stress signal, not a poverty rate."
+                )
+            st.markdown(f'<div class="callout">{cue}</div>', unsafe_allow_html=True)
 
     if len(district_table) >= 2:
         drill_target = st.selectbox("District drill-down", ["—"] + district_table["group"].tolist(), format_func=lambda d: "Pick a district to inspect" if d == "—" else d, key="regional_drill")
@@ -1548,6 +1722,29 @@ def render_resilience(df: pd.DataFrame) -> None:
         st.plotly_chart(chart_theme(fig, 245), width="stretch", config={"displayModeBar": False})
         st.markdown('</div>', unsafe_allow_html=True)
 
+    component_rates = {
+        label: weighted_rate(view, view[column])
+        for label, column, _note in components
+    }
+    observed_components = {label: value for label, value in component_rates.items() if pd.notna(value)}
+    weakest = min(observed_components.items(), key=lambda item: item[1]) if observed_components else None
+    setting_gap = float("nan")
+    setting_read = "Setting comparison is unavailable in this lens."
+    if len(setting) >= 2 and setting["value"].notna().any():
+        rural = setting.loc[setting["group"].eq("Rural"), "value"]
+        urban = setting.loc[setting["group"].eq("Urban"), "value"]
+        if len(rural) and len(urban):
+            setting_gap = float(rural.iloc[0] - urban.iloc[0])
+            setting_read = f"The rural–urban Priority difference is {setting_gap:+.0%} (rural minus urban)."
+    section_head("What the lens identifies", "A prioritisation signal built from observed capabilities")
+    if weakest is not None:
+        st.markdown(
+            f'<div class="callout"><strong>Weakest observed capability: {weakest[0]} at {pct(weakest[1])}.</strong> '
+            f"The Priority band is {pct(risk)} and the Watch band is {pct(watch)} among scored respondents. "
+            f"{setting_read} Use these results to design an offer and a delivery route; do not treat the band as a poverty label, eligibility rule or causal forecast.</div>",
+            unsafe_allow_html=True,
+        )
+
     section_head("What action could look like", "Translate signals into a practical programme conversation")
     x, y, z = st.columns(3)
     with x:
@@ -1582,6 +1779,18 @@ def render_explorer(df: pd.DataFrame, profile: SourceProfile | None = None) -> N
     view = filter_bar(df, "explorer")
     if not has_data(view):
         return
+    section_head("Current analytical scope", "Know the size and geography of the evidence before reading a percentage")
+    valid_weights = view["hh_wt"].notna() & view["hh_wt"].gt(0) & np.isfinite(view["hh_wt"])
+    scope_cards = [
+        ("Rows in lens", f"{len(view):,}", "loaded records after the active filters"),
+        ("Weighted records", f"{int(valid_weights.sum()):,}", "rows with a positive, usable analysis weight"),
+        ("Provinces", f"{view['province'].nunique(dropna=True):,}", "geographic groups represented"),
+        ("Districts", f"{view['district'].nunique(dropna=True):,}", "district groups represented"),
+    ]
+    scope_cols = st.columns(4)
+    for col, (label, value, note) in zip(scope_cols, scope_cards):
+        with col:
+            metric_card(label, value, note, "▤", "green")
     if not aggregate_release_allowed(profile):
         gate_col, why_col = st.columns([1.55, 1])
         with gate_col:
@@ -1649,6 +1858,17 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
     with right:
         st.markdown(f'<div class="callout"><strong>Scope.</strong><br><br>{profile.source_variables:,} source variables were inventoried. This dashboard loads {profile.analytical_variables:,} documented analytical variables, plus derived labels and indicators.<br><br><strong>Important.</strong><br><br>A clean load, unique key and valid codes do not prove that the survey is representative or that an official statistic can be published.</div>', unsafe_allow_html=True)
 
+    if missing_values:
+        most_missing_column, most_missing_value = max(missing_values, key=lambda item: item[1])
+        section_head("What quality means for the problem", "Coverage determines which questions can be answered with confidence")
+        st.markdown(
+            f'<div class="callout"><strong>{most_missing_column} has the highest missingness in this analytical slice at {most_missing_value:.1f}%.</strong> '
+            f"That is why every indicator reports its own valid denominator and why the dashboard does not impute a missing answer. "
+            f"The current file contains {len(df):,} loaded rows, {summary['PASS']} passing checks, {summary['WARN']} warnings and {summary['FAIL']} blocking failures. "
+            "These checks protect the calculation chain; they do not certify representativeness, poverty measurement or publication readiness.</div>",
+            unsafe_allow_html=True,
+        )
+
     section_head("Quality limitations", "What remains outside the executed checks")
     st.markdown('<div class="chart-card"><div class="section-note" style="font-size:.8rem;line-height:1.65">The workspace does not contain the fieldwork protocol, sample design, questionnaire version, enumerator quality controls, non-response adjustments, geographic boundary release, disclosure review, or an approved publication record. These should be supplied before an official public research release.</div></div>', unsafe_allow_html=True)
 
@@ -1682,6 +1902,25 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
         ]:
             st.markdown(f'<div style="display:flex;gap:.8rem;padding:.72rem 0;border-bottom:1px solid #e8ecf5"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{no}</div><div><div style="font-weight:700;font-size:.8rem">{title}</div><div style="font-size:.73rem;color:#66718b;line-height:1.4;margin-top:.18rem">{copy}</div></div></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
+    section_head("Quantitative audit snapshot", "The scale of the evidence behind the displayed numbers")
+    audit_cards = [
+        ("Loaded rows", f"{profile.rows:,}", "records represented in the active source profile"),
+        ("Source variables", f"{profile.source_variables:,}", "variables inventoried before the analytical slice was selected"),
+        ("Analytical variables", f"{profile.analytical_variables:,}", "documented fields loaded plus derived indicators"),
+        ("Executed checks", f"{len(checks):,}", "quality and traceability checks recorded for this build"),
+    ]
+    audit_cols = st.columns(4)
+    for col, (label, value, note) in zip(audit_cols, audit_cards):
+        with col:
+            st.markdown(
+                f'<div class="insight-card"><div class="insight-kicker">{label}</div><div class="insight-text">{value}</div><div class="insight-foot">{note}</div></div>',
+                unsafe_allow_html=True,
+            )
+    st.markdown(
+        '<div class="callout"><strong>Why this matters.</strong> The pipeline makes the numbers traceable from source variables to weighted estimates, but traceability is not the same as official publication authority. The two supplied waves are retained as separate samples and are pooled only where the dashboard explicitly says so.</div>',
+        unsafe_allow_html=True,
+    )
 
     section_head("Available source materials", "What was actually found in the workspace")
     st.dataframe(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded survey variable and value labels"]}), hide_index=True, width="stretch")
@@ -1720,6 +1959,85 @@ def render_about(df: pd.DataFrame) -> None:
         st.markdown('<div class="chart-card"><div class="section-title">Resilience lens</div><div class="section-note">The score is the mean of four binary capabilities: emergency funds, own money, saving at least sometimes and a potential social support contact. It is a prioritisation lens, not a poverty line or modelled probability.</div></div>', unsafe_allow_html=True)
     with m3:
         st.markdown('<div class="chart-card"><div class="section-title">Data integrity</div><div class="section-note">Missing responses are excluded from each indicator’s denominator. The explorer makes the filtered sample visible so users can assess coverage before interpreting a result.</div></div>', unsafe_allow_html=True)
+
+    def about_rate(column: str) -> float:
+        return weighted_rate(df, df[column]) if column in df else float("nan")
+
+    access_rate = about_rate("active_access")
+    mobile_rate = about_rate("mobile_money")
+    buffer_rate = about_rate("emergency_fund")
+    pressure_rate = about_rate("income_pressure")
+    internet_rate = about_rate("internet_access")
+
+    section_head("What problem the analysis shows", "Access is not the same as the ability to absorb a shock")
+    problem_cards = [
+        (
+            "01",
+            "Access can hide fragility",
+            f"{pct(access_rate)} have active formal access and {pct(mobile_rate)} use mobile money, but only {pct(buffer_rate)} report an emergency fund.",
+            "The main problem is not only reaching a financial channel; it is building a buffer before the next shock.",
+        ),
+        (
+            "02",
+            "Daily pressure limits resilience",
+            f"{pct(pressure_rate)} report income pressure, meaning income does not cover monthly living costs.",
+            "Households under regular pressure have less room to save, keep liquidity or recover after an emergency.",
+        ),
+        (
+            "03",
+            "Digital reach is uneven",
+            f"{pct(1 - internet_rate)} of the active lens lacks internet access.",
+            "A digital-only service can miss the people who need support most unless assisted and low-bandwidth routes remain available.",
+        ),
+    ]
+    pcols = st.columns(3)
+    for col, (number, title, signal, implication) in zip(pcols, problem_cards):
+        with col:
+            st.markdown(
+                f'<div class="insight-card"><div class="insight-kicker">Signal {number}</div><div class="insight-text">{signal}</div><div class="insight-foot">{implication}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    section_head("How the analysis is done", "From source files to a decision signal")
+    analysis_steps = [
+        ("01", "Load and harmonise", "Read the supplied 2024 Stata and 2020 SPSS sources, verify labels and keep them as independent samples."),
+        ("02", "Measure the gap", "Calculate six financial-inclusion indicators with valid-response rules, visible denominators and household weights."),
+        ("03", "Build the resilience lens", "Combine emergency funds, own money, saving behaviour and social support into an inspectable prioritisation lens."),
+        ("04", "Test what can be predicted", "Evaluate a leakage-controlled model on held-out records to rank the Priority band; this is an association, not a causal or eligibility decision."),
+    ]
+    for number, title, description in analysis_steps:
+        st.markdown(
+            f'<div class="chart-card" style="display:flex;gap:1rem;align-items:flex-start;padding:.9rem 1rem;margin-bottom:.55rem"><div class="mono" style="color:#3155d4;font-size:.72rem;padding-top:.1rem">{number}</div><div><div class="section-title" style="font-size:1rem">{title}</div><div class="section-note" style="line-height:1.55">{description}</div></div></div>',
+            unsafe_allow_html=True,
+        )
+
+    section_head("What this can help solve", "The dashboard supports decisions; it does not promise a solved outcome")
+    solution_cards = [
+        ("Build buffers", "Use emergency-fund and income-pressure signals to design savings nudges, emergency liquidity and shock-responsive finance."),
+        ("Keep access inclusive", "Pair mobile-money and digital channels with agents, USSD and other assisted routes where internet access is thin."),
+        ("Target action geographically", "Use province and district comparisons to place outreach, financial education and protection services where the gap is largest."),
+        ("Improve the next decision", "Use the documented blockers to request the poverty line, welfare aggregate, survey-design metadata and publication approvals needed for stronger official estimates."),
+    ]
+    scols = st.columns(4)
+    for col, (title, description) in zip(scols, solution_cards):
+        with col:
+            st.markdown(
+                f'<div class="chart-card"><div class="section-title" style="font-size:1rem">{title}</div><div class="section-note" style="line-height:1.55">{description}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    section_head("Future outlook from the evidence", "Directional scenarios, not a time-series forecast")
+    st.markdown(
+        '<div class="callout"><strong>Most likely if nothing changes.</strong><br>Households without emergency buffers will remain the most exposed to income shocks, and digital-first programmes will continue to leave gaps where internet access is low.</div>',
+        unsafe_allow_html=True,
+    )
+    outlook = pd.DataFrame([
+        ["If buffers expand", "The Priority share should move downward over time, because more households would have an observed capability to absorb a shock."],
+        ["If access expands without buffers", "Formal usage may rise while financial fragility remains; access alone should not be treated as poverty reduction."],
+        ["What the model can add", "The tested model can rank observed households by Priority likelihood for follow-up, but it cannot forecast future rates or prove that an intervention caused improvement."],
+    ], columns=["Scenario", "Expected direction"])
+    st.dataframe(outlook, hide_index=True, width="stretch")
+    st.info("The supplied workspace contains cross-sectional survey waves, not a longitudinal outcome series. Future quantities therefore need follow-up survey waves or programme monitoring before they can be forecast numerically.")
 
     section_head("Hackathon alignment", "How the prototype answers the judging criteria")
     criteria = pd.DataFrame([
@@ -1876,6 +2194,7 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
         return
 
 
+<<<<<<< HEAD
 # -----------------------------------------------------------------------------
 # Ask InsightRwanda — evidence-based assistant UI
 # Every number is produced by research/assistant.py from the loaded survey
@@ -1914,6 +2233,30 @@ ASK_GENERAL_STATUS: dict[str, str] = {
                    "project answer is shown instead.",
     "refused": "For safety, nothing was sent to the AI service for this question. The offline "
                "project answer is shown.",
+=======
+ASK_SUGGESTIONS: tuple[str, ...] = (
+    "What does financial inclusion mean?",
+    "Explain the available financial inclusion indicators.",
+    "What are the main data quality limitations?",
+    "How are the reported indicators calculated?",
+    "Which findings require further verification?",
+)
+ASK_AI_STATUS: dict[str, str] = {
+    "disabled": "This answer uses the verified project rules and remains local.",
+    "blocked": "This answer remains local because its evidence is not approved for external sharing.",
+    "rate_limited": "The optional wording service reached its usage limit. The verified project "
+                    "answer is shown unchanged; please try again later.",
+    "invalid_key": "The optional wording service could not authenticate. The verified project "
+                   "answer is shown unchanged.",
+    "timeout": "The optional wording service did not respond in time. The verified project "
+               "answer is shown unchanged; no retry was attempted.",
+    "invalid_response": "The optional wording service returned no usable text. The verified "
+                        "project answer is shown unchanged.",
+    "unavailable": "The optional wording service is temporarily unavailable. The verified project "
+                   "answer is shown unchanged.",
+    "guard_rejected": "The optional wording changed a protected figure or added a new one, so it "
+                      "was discarded. The verified project answer is shown unchanged.",
+>>>>>>> 682a4c9 (commited by dna)
 }
 ASK_SUMMARY: str = (
     "Ask questions about Rwanda's financial inclusion and poverty insights."
@@ -2016,6 +2359,7 @@ def _ask_queue(question: str | None = None) -> None:
     st.session_state["ask_pending"] = question
 
 
+<<<<<<< HEAD
 def _ask_setting(name: str) -> str:
     """Read an assistant setting from Streamlit secrets, then the environment."""
 
@@ -2041,6 +2385,16 @@ def _ask_provider():
     if provider is not None:
         return provider
     key = _ask_setting("GROQ_API_KEY")
+=======
+def _ask_provider():
+    key = ""
+    try:
+        key = str(st.secrets.get("GEMINI_API_KEY", "") or "").strip()
+    except Exception:
+        key = ""
+    if not key:
+        key = str(os.environ.get("GEMINI_API_KEY", "") or "").strip()
+>>>>>>> 682a4c9 (commited by dna)
     if not key:
         return None
     try:
@@ -2132,6 +2486,7 @@ def _ask_process(
         })
         st.session_state["ask_input"] = ""
         return
+<<<<<<< HEAD
     # Optional Groq layers. Both stay off unless the deployment sets
     # GROQ_API_KEY. The wording layer receives only an already-grounded answer
     # whose figures have been replaced with local tokens, and any provider
@@ -2140,6 +2495,8 @@ def _ask_process(
     # verified evidence: the typed question alone may then be sent (no survey
     # figure, record or identifier), the answer is labelled as model knowledge,
     # and any provider failure falls back to the deterministic answer.
+=======
+>>>>>>> 682a4c9 (commited by dna)
     provider = _ask_provider()
     if answer.question_kind == "fallback" and provider is not None:
         general_text, general_status = answer_general_with_status(question, provider)
@@ -2221,9 +2578,15 @@ def _ask_render_message(message: dict[str, object]) -> None:
             status = message.get("ai_status")
             if message.get("general") is True:
                 st.markdown(
+<<<<<<< HEAD
                     "<div class='ask-state'>General AI answer — general AI knowledge, "
                     "<strong>not</strong> from this survey's verified data. Survey figures "
                     "belong to the dashboard pages; check anything else before relying on it.</div>",
+=======
+                    "<div class='ask-state'>Refined wording from verified project evidence "
+                    f"({redacted} figure placeholder(s) restored locally; no survey figure was "
+                    "sent). Check important details against the sources.</div>",
+>>>>>>> 682a4c9 (commited by dna)
                     unsafe_allow_html=True,
                 )
             elif isinstance(status, str) and message.get("general_attempt") is True and status in ASK_GENERAL_STATUS:
@@ -2250,22 +2613,18 @@ def _ask_render_message(message: dict[str, object]) -> None:
 
 @st.fragment
 def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> None:
-    """Floating launcher and in-screen AI Assistant panel.
-
-    Rendered once per page at the end of ``main()``. Scoped CSS fixes the
-    launcher to the bottom-right corner; the panel opens above it on the same
-    screen, so the current page and its charts stay in place. Both controls
-    run inside a fragment: opening, closing and chatting rerender only this
-    widget, never the whole application. Conversation state is session-only.
-    """
-
     with st.container(key="ask_launcher"):
         st.button(
-            "AI Assistant",
+            "Insight Assistant",
             key="ask_launch",
             icon=":material/forum:",
+<<<<<<< HEAD
             help="Open the InsightRwanda AI Assistant. Answers use verified project "
                  "evidence; AI-polished wording runs only when enabled for the deployment.",
+=======
+            help="Open the InsightRwanda Assistant. Answers use verified project evidence; "
+                 "optional wording refinement runs only when configured.",
+>>>>>>> 682a4c9 (commited by dna)
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
@@ -2273,15 +2632,27 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
 
     provider = _ask_provider()
     badge = (
+<<<<<<< HEAD
         f"Verified project evidence · answers stay local"
         if provider is None else
         f"Verified project evidence · AI wording layer active"
+=======
+        "Verified project rules · answers stay local"
+        if provider is None else
+        "Optional wording · figures are replaced with local tokens before sending · "
+        "review important details"
+>>>>>>> 682a4c9 (commited by dna)
     )
 
     with st.container(key="ask_panel"):
         st.markdown(
+<<<<<<< HEAD
             "<div class='ask-head'><img class='ask-mark' src='" + logo_data_uri() + "' alt='InsightRwanda logo'>"
             "<div><div class='ask-title'>InsightRwanda AI Assistant</div>"
+=======
+            "<div class='ask-head'><span class='ask-mark' aria-hidden='true'>◒</span>"
+            "<div><div class='ask-title'>InsightRwanda Assistant</div>"
+>>>>>>> 682a4c9 (commited by dna)
             f"<div class='ask-subtitle'>{ASK_SUMMARY}</div></div></div>",
             unsafe_allow_html=True,
         )
@@ -2299,8 +2670,13 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
         if provider is None:
             st.caption(
+<<<<<<< HEAD
                 "AI-polished wording is not enabled for this panel. Answers still use the "
                 "verified project evidence."
+=======
+                "Optional wording is not configured here. Answers still use the verified project "
+                "rules."
+>>>>>>> 682a4c9 (commited by dna)
             )
 
         pending = st.session_state.pop("ask_pending", None)
@@ -2316,10 +2692,17 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             else:
                 st.markdown(
                     "<div class='ask-empty'><div class='ask-empty-title'>Ask about verified "
+<<<<<<< HEAD
                     "insights</div><div class='ask-empty-copy'>Answers about the evidence come "
                     "from this project's approved definitions and loaded survey records. When a "
                     "question has no verified answer, it may be answered from general knowledge "
                     "and is labelled as such.</div></div>",
+=======
+                    "insights</div><div class='ask-empty-copy'>Answers come from this project's "
+                    "approved definitions and loaded survey records — never from outside "
+                    "knowledge. Survey figures are replaced with local tokens before any wording "
+                    "refinement request. Start with one of these:</div></div>",
+>>>>>>> 682a4c9 (commited by dna)
                     unsafe_allow_html=True,
                 )
 
@@ -2358,8 +2741,15 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 on_click=_ask_clear,
             )
         st.markdown(
+<<<<<<< HEAD
             "<div class='ask-foot'>Do not enter personal or household-level details in your "
             "questions.</div>",
+=======
+            "<div class='ask-foot'>Do not enter personal or household-level details. Only your "
+            "question and approved project wording are sent when optional wording is configured; "
+            "survey figures are replaced locally before sending. Refined wording may contain "
+            "errors and is not an official NISR conclusion.</div>",
+>>>>>>> 682a4c9 (commited by dna)
             unsafe_allow_html=True,
         )
 
@@ -2502,7 +2892,6 @@ def main() -> None:
 
     lens_toast(page, lens_signature(_lens_view(df, page), page))
     kpi_countup()
-    # Floating AI Assistant — same screen, page content stays behind it.
     ask_assistant_widget(df, profile, checks)
 
 

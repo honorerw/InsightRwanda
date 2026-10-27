@@ -13,7 +13,7 @@ The core is Streamlit-free and state-free: the caller supplies the active
 frame, source profile, quality checks, human-readable source label, applied
 lens note and page context as explicit arguments. Unknown questions get an
 honest fallback; restricted and injection-shaped requests are refused. No
-LLM, no network, no new dependencies.
+network, no new dependencies.
 """
 
 from __future__ import annotations

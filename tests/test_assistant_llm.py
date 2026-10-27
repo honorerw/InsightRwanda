@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Tests for research.assistant_llm — the optional Groq wording layer.
 
 Everything here uses stub clients/providers. No test reads a real key, touches
@@ -6,6 +7,8 @@ gate, successful wording, invalid keys, quotas, timeouts, network failures,
 input limits, privacy filtering and the figure-redaction guard.
 """
 
+=======
+>>>>>>> 682a4c9 (commited by dna)
 from __future__ import annotations
 
 import unittest
@@ -370,7 +373,6 @@ class RedactionTests(unittest.TestCase):
             self.assertNotIn(path, as_text)
         self.assertNotIn("Traceback", as_text)
         self.assertFalse(any(t in as_text for t in ("api_key", "API_KEY", "sk-")))
-        # No survey figures survive: strip public ids/citations, then no digits.
         import re
         probe = redacted.replace("FI-04", "").replace("Page 09", "")
         probe = re.sub(r"⟦V\d+⟧", "", probe)
@@ -404,8 +406,6 @@ class RefineAnswerTests(unittest.TestCase):
         self.assertIn("Rwf", result.answer.answer)
         self.assertEqual(result.answer.references, self.answer.references)
         self.assertNotIn("62.5%", provider.called_with[0].verified_answer)
-        # No raw figure is transmitted: strip placeholder tokens and public
-        # citations, then no digits may remain (the 'Rwf' unit itself is text).
         import re
         probe = re.sub(r"⟦V\d+⟧", "", provider.called_with[0].verified_answer)
         probe = probe.replace("FI-04", "")

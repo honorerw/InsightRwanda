@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Optional Groq wording layer for Ask InsightRwanda.
 
 DESIGN
@@ -77,6 +78,8 @@ FAIL-CLOSED BEHAVIOUR
 No automatic retries are made (the SDK's default retries are disabled), and no
 paid fallback provider is used.
 """
+=======
+>>>>>>> 682a4c9 (commited by dna)
 
 from __future__ import annotations
 
@@ -117,23 +120,30 @@ __all__ = [
     "restore_wording",
     "wording_preserves_evidence",
 ]
+<<<<<<< HEAD
 
 #: Production text model currently listed by Groq; override after checking the
 #: live model catalogue and the account's rate limits.
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
 _MODEL_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,80}$")
+=======
+GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite"
+_MODEL_PATTERN = re.compile(r"^gemini-[a-z0-9][a-z0-9.\-]{1,80}$")
+>>>>>>> 682a4c9 (commited by dna)
 
 DEFAULT_TIMEOUT_SECONDS = 20.0
 MAX_OUTPUT_TOKENS = 1_200
 MAX_WORDING_CHARS = 4_000
-#: Hard ceiling on question + verified answer before anything is transmitted.
 MAX_PAYLOAD_CHARS = 12_000
+<<<<<<< HEAD
 
 # Documentation answers that may leave the app after figure redaction. These
 # are definitions, methods, documented limitations, catalogue text and the
 # public project identity. Every figure in them is tokenised first. Kinds that
 # describe restricted source inventory, publication status or page narratives
 # are deliberately absent: their permission is not established.
+=======
+>>>>>>> 682a4c9 (commited by dna)
 _EXTERNALLY_SHAREABLE_KINDS = frozenset({
     "explain_indicator",
     "indicator_catalog",
@@ -180,6 +190,7 @@ GENERAL_GUIDANCE = (
 
 
 class ProviderError(Exception):
+<<<<<<< HEAD
     """Base class: any Groq failure. Users see only our safe status text."""
 
 
@@ -213,15 +224,29 @@ def _usable_text(completion: Any) -> str:
     if len(cleaned) > MAX_WORDING_CHARS:
         raise ProviderInvalidResponse("Groq returned an oversized response")
     return cleaned
+=======
+    pass
+
+
+class ProviderTimeout(ProviderError):
+    pass
+
+
+class ProviderRateLimited(ProviderError):
+    pass
+
+
+class ProviderAuthError(ProviderError):
+    pass
+
+
+class ProviderInvalidResponse(ProviderError):
+    pass
+>>>>>>> 682a4c9 (commited by dna)
 
 
 @dataclass(frozen=True)
 class ExplanationPayload:
-    """The complete, closed set of what a model may ever receive.
-
-    ``verified_answer`` is the figure-redacted answer text, never the raw
-    deterministic answer.
-    """
 
     question: str
     verified_answer: str
@@ -229,7 +254,6 @@ class ExplanationPayload:
 
 @dataclass(frozen=True)
 class Refinement:
-    """Deterministic answer plus the reason the wording layer did or did not run."""
 
     answer: AssistantAnswer
     status: str
@@ -237,23 +261,10 @@ class Refinement:
 
 
 class ExplanationProvider(Protocol):
-    """Contract a provider adapter must satisfy.
-
-    Implementations MUST:
-      - enforce an explicit request timeout (raising ProviderTimeout),
-      - never retry a failed request automatically,
-      - translate quota/rate-limit responses into ProviderRateLimited,
-      - translate invalid credentials into ProviderAuthError,
-      - translate unusable responses into ProviderInvalidResponse,
-      - never log question content, answers or credentials,
-      - make no background or prefetch calls (explicit user requests only),
-      - never widen the payload (the permitted input set is closed).
-    """
 
     name: str
 
     def explain(self, payload: ExplanationPayload) -> str:
-        """Return the reworded text, or raise a ProviderError subclass."""
         ...
 
 
@@ -261,13 +272,11 @@ def build_explanation_payload(
     question: str,
     verified_answer: str,
 ) -> ExplanationPayload:
-    """Assemble the closed, smallest permitted payload; nothing else is sent."""
 
     return ExplanationPayload(question=str(question), verified_answer=str(verified_answer))
 
 
 def payload_within_limits(payload: ExplanationPayload) -> bool:
-    """Refuse oversized questions/answers rather than truncating evidence."""
 
     return (
         len(str(payload.question)) + len(str(payload.verified_answer))
@@ -276,11 +285,14 @@ def payload_within_limits(payload: ExplanationPayload) -> bool:
 
 
 def payload_has_raw_figures(payload: ExplanationPayload) -> bool:
+<<<<<<< HEAD
     """True if the question or answer still has a digit outside a token/citation.
 
     Defence in depth: ``refine_answer_with_status`` redacts both fields first,
     and the provider refuses to transmit a payload that bypassed that step.
     """
+=======
+>>>>>>> 682a4c9 (commited by dna)
 
     probe = _PLACEHOLDER.sub("", f"{payload.question}\n{payload.verified_answer}")
     probe = _QUESTION_PLACEHOLDER.sub("", probe)
@@ -291,22 +303,14 @@ def payload_has_raw_figures(payload: ExplanationPayload) -> bool:
 def external_sharing_allowed(
     answer: AssistantAnswer,
     *,
-    aggregate_sharing_approved: bool = False,  # retained for call-site compatibility
+    aggregate_sharing_approved: bool = False,
 ) -> bool:
-    """Whether this answer may be offered for external wording at all.
-
-    Figures are always tokenised before transmission; the approval flag no
-    longer grants raw-figure transfer because no call site needs it. Restricted
-    source inventory, publication status, quality findings and page narratives
-    remain ineligible.
-    """
 
     del aggregate_sharing_approved
     return bool(answer.grounded) and answer.question_kind in _EXTERNALLY_SHAREABLE_KINDS
 
 
 def _translate_provider_error(exc: Exception) -> ProviderError:
-    """Map an SDK/network exception to a safe, non-leaking error class."""
 
     if isinstance(exc, ProviderError):
         return exc
@@ -328,6 +332,7 @@ def _translate_provider_error(exc: Exception) -> ProviderError:
     return ProviderError("Groq request failed")
 
 
+<<<<<<< HEAD
 class GroqProvider:
     """Reword verified answers through Groq's official Python SDK.
 
@@ -336,6 +341,9 @@ class GroqProvider:
     repeated requests. The key and client are never included in a
     representation or exception.
     """
+=======
+class GeminiProvider:
+>>>>>>> 682a4c9 (commited by dna)
 
     name = "groq"
 
@@ -379,7 +387,10 @@ class GroqProvider:
         return f"GroqProvider(model={self._model!r})"
 
     def explain(self, payload: ExplanationPayload) -> str:
+<<<<<<< HEAD
         """Return Groq's reworded text, or raise a ProviderError subclass."""
+=======
+>>>>>>> 682a4c9 (commited by dna)
 
         if not payload_within_limits(payload):
             raise ProviderInvalidResponse("payload is too large")
@@ -406,8 +417,22 @@ class GroqProvider:
             request["reasoning_effort"] = "low"
             request["reasoning_format"] = "hidden"
         try:
+<<<<<<< HEAD
             completion = self._client.chat.completions.create(**request)
         except Exception as exc:  # every provider failure stays contained
+=======
+            interaction = self._client.interactions.create(
+                model=self._model,
+                system_instruction=REWRITE_GUIDANCE,
+                input=input_text,
+                generation_config={
+                    "max_output_tokens": MAX_OUTPUT_TOKENS,
+                    "thinking_level": "low",
+                },
+                timeout=self._timeout,
+            )
+        except Exception as exc:
+>>>>>>> 682a4c9 (commited by dna)
             raise _translate_provider_error(exc) from None
         return _usable_text(completion)
 
@@ -453,12 +478,15 @@ def get_configured_provider(
     environ: Mapping[str, str] | None = None,
     client: Any | None = None,
 ) -> ExplanationProvider | None:
+<<<<<<< HEAD
     """Return a Groq provider, or None when the deployment is not configured.
 
     The caller passes the key it read from Streamlit secrets; otherwise
     ``GROQ_API_KEY`` in the environment is used. No key means no provider, no
     import attempt, no network. A malformed model or client setup fails closed.
     """
+=======
+>>>>>>> 682a4c9 (commited by dna)
 
     env = os.environ if environ is None else environ
     key = str(api_key if api_key is not None else env.get("GROQ_API_KEY", "")).strip()
@@ -469,11 +497,6 @@ def get_configured_provider(
         return GroqProvider(api_key=key, model=model, client=client)
     except (ProviderError, ValueError):
         return None
-
-
-#: Matches a public citation/id first, then any run of digits (with optional
-#: decimal part and percent sign). Alternation order prevents the digits inside
-#: ``FI-01`` or ``Page 09`` from being treated as survey figures.
 _PUBLIC_CITATION = re.compile(
     r"\b(?:FI|EI)-\d{2}\b|\bPage \d{2}\b|"
     r"\b(?:Official-poverty contract|Honesty statement|Disclosure boundary)\b"
@@ -504,11 +527,11 @@ def _question_has_direct_identifier(question: str) -> bool:
 
 
 def _drop_public_citations(text: str) -> str:
-    """Remove public ids/citations, leaving any raw figure digits visible."""
 
     return _PUBLIC_CITATION.sub("", text)
 
 
+<<<<<<< HEAD
 def redact_figures(text: str, *, prefix: str = "V") -> tuple[str, dict[str, str]]:
     """Replace every survey figure with a local placeholder.
 
@@ -520,6 +543,9 @@ def redact_figures(text: str, *, prefix: str = "V") -> tuple[str, dict[str, str]
     deliberately left readable. The mapping never leaves the process; only
     ``redacted`` is placed in an ``ExplanationPayload``.
     """
+=======
+def redact_figures(text: str) -> tuple[str, dict[str, str]]:
+>>>>>>> 682a4c9 (commited by dna)
 
     if prefix not in {"V", "Q"}:  # only the two intentional namespaces
         raise ValueError("unsupported placeholder prefix")
@@ -539,19 +565,12 @@ def redact_figures(text: str, *, prefix: str = "V") -> tuple[str, dict[str, str]
 
 
 def restore_wording(wording: str, mapping: Mapping[str, str]) -> str | None:
-    """Validate a placeholder wording and restore the exact local figures.
-
-    Fails closed (returns None) when a placeholder is missing, unknown or
-    duplicated, or when the model introduced any new digit outside the tokens
-    and public citations. Nothing is restored from an unvalidated wording.
-    """
 
     if not isinstance(wording, str) or not wording.strip():
         return None
     if _QUESTION_PLACEHOLDER.search(wording):  # question tokens never belong in an answer
         return None
     if not mapping:
-        # With no figures to protect, still refuse any model-invented digit.
         stripped = _drop_public_citations(wording)
         return wording.strip() if not re.search(r"\d", stripped) else None
     seen: dict[str, int] = {}
@@ -561,7 +580,6 @@ def restore_wording(wording: str, mapping: Mapping[str, str]) -> str | None:
     for placeholder in mapping:
         if seen.get(placeholder, 0) != 1:
             return None
-    # Remove known placeholders and public citations, then reject any new digit.
     probe = wording
     for placeholder in mapping:
         probe = probe.replace(placeholder, " ")
@@ -576,21 +594,6 @@ def restore_wording(wording: str, mapping: Mapping[str, str]) -> str | None:
 
 
 def _protected_tokens(answer_text: str) -> frozenset[str]:
-    """Every token a wording must preserve, extracted from the whole answer.
-
-    Numbers are captured as maximal digit runs (digits plus optional decimal
-    point), so the denominator '5' in '3 of 5 respondents' can never be
-    satisfied by the '5' inside '62.5%', and '13,994' is one figure. Each
-    percentage is additionally captured whole-with-percent-sign so a wording
-    like '62.5‰' or '62.5 percentage points' cannot silently replace '62.5%'.
-    Indicator IDs (``FI-01``/``EI-03``), named governance citations and page
-    citations are captured as-is. Interval endpoints (``40.0%``-``45.0%``)
-    are protected individually through these runs.
-    """
-
-    # Grouped counts read as one figure ("13,994" -> "13994"); extracting from
-    # the comma-normalised text keeps '56' from becoming a phantom standalone
-    # token alongside '56000'.
     normalized = answer_text.replace(",", "")
     tokens: set[str] = set()
     tokens.update(re.findall(r"\b(?:FI|EI)-\d{2}\b", normalized))
@@ -605,14 +608,6 @@ def _protected_tokens(answer_text: str) -> frozenset[str]:
 
 
 def wording_preserves_evidence(verified_answer: str, wording: str) -> bool:
-    """Fail-closed numeric and citation guard for a candidate wording.
-
-    Every protected token from the deterministic answer must appear verbatim
-    in the model wording (commas inside numbers are normalised — '13,994' and
-    '13994' describe the same figure; nothing else is forgiven). Each needle
-    must stand as its own number: '56' does not satisfy a wording that only
-    contains '56000', and any unexplained drift fails closed.
-    """
 
     if not isinstance(wording, str):
         return False
@@ -682,14 +677,6 @@ def refine_answer_with_status(
     *,
     aggregate_sharing_approved: bool = False,
 ) -> Refinement:
-    """Offer a deterministically-grounded answer for wording only.
-
-    The deterministic answer always wins. Every survey figure is replaced with
-    a local placeholder before the provider is called and restored only after
-    the returned wording passes the digit guard. The status explains why the
-    AI layer did or did not run without exposing provider details, keys or
-    exception text.
-    """
 
     if provider is None:
         return Refinement(answer, "disabled")
@@ -716,7 +703,7 @@ def refine_answer_with_status(
         return Refinement(answer, "invalid_response")
     except ProviderError:
         return Refinement(answer, "unavailable")
-    except Exception:  # a provider broke its contract — fail closed
+    except Exception:
         return Refinement(answer, "unavailable")
     restored = restore_wording(wording, mapping)
     if restored is None or not wording_preserves_evidence(answer.answer, restored):
@@ -733,7 +720,6 @@ def refine_answer(
     *,
     aggregate_sharing_approved: bool = False,
 ) -> AssistantAnswer:
-    """Backward-compatible wrapper returning only the answer text."""
 
     return refine_answer_with_status(
         question,

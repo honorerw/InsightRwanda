@@ -1,13 +1,3 @@
-"""End-to-end UI tests for the floating InsightRwanda AI Assistant.
-
-These run the real ``app.py`` through Streamlit's AppTest runtime: the actual
-dashboard, the real survey files and the deterministic assistant. No network
-and no external AI provider is involved.
-
-Covered here: panel visibility state, session-only chat history, question
-handling, unavailable evidence and household-level data-access refusals.
-"""
-
 from __future__ import annotations
 
 import os
@@ -80,14 +70,14 @@ class AssistantPanelUiTests(unittest.TestCase):
         nav_before = [button.label for button in self.at.button if button.label[:2].isdigit()]
         self.assertEqual(len(nav_before), 10)
         self.assertFalse(any(button.label == "Close" for button in self.at.button))
-        self.assertTrue(any(button.label == "AI Assistant" for button in self.at.button))
+        self.assertTrue(any(button.label == "Insight Assistant" for button in self.at.button))
         self.assertNotIn("ask_open", self.at.session_state)
 
         self.open_panel()
 
         self.assertTrue(self.at.session_state["ask_open"])
         self.assertEqual(self.at.session_state.get("workspace_nav", "Overview"), "Overview")
-        self.assertTrue(any(button.label == "AI Assistant" for button in self.at.button))
+        self.assertTrue(any(button.label == "Insight Assistant" for button in self.at.button))
         self.assertEqual(len([b for b in self.at.button if b.key == "ask_close"]), 1)
         self.assertEqual(
             [element.placeholder for element in self.at.text_input],
@@ -95,7 +85,7 @@ class AssistantPanelUiTests(unittest.TestCase):
         )
 
         rendered = self.markdown_text()
-        self.assertIn("InsightRwanda AI Assistant", rendered)
+        self.assertIn("InsightRwanda Assistant", rendered)
         self.assertIn("Ask questions about Rwanda's financial inclusion and poverty insights.", rendered)
         self.assertIn("answers stay local", rendered)
         self.assertIn("Ask about verified insights", rendered)
@@ -123,7 +113,6 @@ class AssistantPanelUiTests(unittest.TestCase):
     def test_question_handling_history_and_clear(self) -> None:
         self.open_panel()
 
-        # Empty submit: an honest prompt, never an invented answer.
         self.at.button(key="ask_send").click()
         self.at.run()
         self.assert_no_exception()
@@ -150,7 +139,7 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertEqual(self.at.session_state["workspace_nav"], "Financial inclusion")
         self.assertTrue(self.at.session_state["ask_open"])
         self.assertEqual(len(self.at.session_state["ask_messages"]), 2)
-        self.assertIn("InsightRwanda AI Assistant", self.markdown_text())
+        self.assertIn("InsightRwanda Assistant", self.markdown_text())
 
         self.at.button(key="ask_clear").click()
         self.at.run()
@@ -162,8 +151,12 @@ class AssistantPanelUiTests(unittest.TestCase):
     def test_configuration_and_privacy_notes_are_visible(self) -> None:
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
+<<<<<<< HEAD
         # End-user language only: no developer setup words in the visible panel.
         self.assertIn("AI-polished wording is not enabled", rendered)
+=======
+        self.assertIn("Optional wording is not configured here", rendered)
+>>>>>>> 682a4c9 (commited by dna)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertNotIn("not an official NISR conclusion", rendered)
         self.assertNotIn("replaced locally before sending", rendered)

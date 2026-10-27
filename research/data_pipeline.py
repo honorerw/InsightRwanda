@@ -107,7 +107,11 @@ def load_analysis_data(path: str | Path) -> pd.DataFrame:
             f"Could not read {source} as a compatible Stata source with the required analytical fields. "
             f"Original error: {exc}"
         ) from exc
-    for column in df.select_dtypes(include=["object", "str"]).columns:
+    # ``select_dtypes(include=["object", "str"])`` is not portable across
+    # pandas versions when Stata exposes NumPy string dtypes. Comparing each
+    # loaded column to the empty-string sentinel is safe for numeric columns
+    # too, and keeps the source-cleaning step version-independent.
+    for column in df.columns:
         df[column] = df[column].mask(df[column].eq(""), np.nan)
     df["province"] = df["a1"].map(PROVINCES).fillna("Unknown")
     df["district"] = df["a2"].map(DISTRICTS).fillna("Unknown")
