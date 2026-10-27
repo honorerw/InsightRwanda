@@ -81,14 +81,14 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertEqual(len([b for b in self.at.button if b.key == "ask_close"]), 1)
         self.assertEqual(
             [element.placeholder for element in self.at.text_input],
-            ["Ask a question about the available insights..."],
+            ["Ask about the project — or anything else..."],
         )
 
         rendered = self.markdown_text()
         self.assertIn("InsightRwanda Assistant", rendered)
-        self.assertIn("Ask questions about Rwanda's financial inclusion and poverty insights.", rendered)
+        self.assertIn("Ask about Rwanda's financial inclusion and poverty insights — or any general question.", rendered)
         self.assertIn("answers stay local", rendered)
-        self.assertIn("Ask about verified insights", rendered)
+        self.assertIn("Ask anything", rendered)
         self.assertIn("is labelled as such", rendered)
         self.assertEqual(
             [button.key for button in self.at.button if button.key.startswith("ask_example_")],
@@ -146,13 +146,13 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assert_no_exception()
         self.assertEqual(self.at.session_state["ask_messages"], [])
         self.assertTrue(self.at.session_state["ask_open"])
-        self.assertIn("Ask about verified insights", self.markdown_text())
+        self.assertIn("Ask anything", self.markdown_text())
 
     def test_configuration_and_privacy_notes_are_visible(self) -> None:
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
         # End-user language only: no developer setup words in the visible panel.
-        self.assertIn("AI-polished wording is not enabled", rendered)
+        self.assertIn("General AI answers are not enabled", rendered)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertNotIn("not an official NISR conclusion", rendered)
         self.assertNotIn("replaced locally before sending", rendered)
@@ -182,7 +182,7 @@ class AssistantPanelUiTests(unittest.TestCase):
             self.assertFalse(list(at.exception))
             rendered = " ".join(e.value for e in at.markdown)
             rendered += " " + " ".join(e.value for e in at.caption)
-        self.assertIn("AI wording layer active", rendered)
+        self.assertIn("general AI answers active", rendered)
         self.assertNotIn("gsk_FAKE-test-placeholder", rendered)
         self.assertNotIn("openai/gpt-oss-120b", rendered)
         self.assertNotIn("local tokens", rendered)

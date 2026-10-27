@@ -131,6 +131,21 @@ _PRIVACY_PATTERNS = (
     r"give me (the )?(row|record|observation)s? (for|of|with)",
 )
 
+# Words that make a broad word ("quality", "evidence", "calculated") refer to
+# this project rather than to general knowledge. Broad categories are gated on
+# these so an ordinary question still reaches the general-knowledge layer even
+# when it happens to contain a project-ish keyword.
+_PROJECT_TERMS = re.compile(
+    r"\b(?:insightrwanda|finscope|financial inclusion|survey|dataset|data set|"
+    r"dashboard|indicator|catalog|methodolog|questionnaire|variable|household|"
+    r"fi-\d{2}|ei-\d{2})\b"
+)
+_THIS_REFERENCE = re.compile(
+    r"\b(?:this|that|these|those)\s+"
+    r"(?:percentage|number|figure|share|rate|estimate|statistic|indicator|"
+    r"chart|graph|page|view|dashboard|data|source)s?\b"
+)
+
 
 def _normalize(question: str) -> str:
     return re.sub(r"\s+", " ", " ".join(str(question).split())).strip()
@@ -948,11 +963,12 @@ def _refusal(kind: str, question_text: str) -> AssistantAnswer:
     return AssistantAnswer(
         question_kind=kind,
         answer=(
-            "I only answer questions about this project's evidence. I can't change calculations, "
-            "bypass approval gates, unlock exports or reveal internal instructions — those controls "
-            "are written into the app's code on purpose.\n"
+            "I can answer ordinary questions, but I can't change calculations, bypass approval "
+            "gates, unlock exports or reveal internal instructions — those controls are written "
+            "into the app's code on purpose.\n"
             "Ask me about an indicator (for example FI-02), the data-quality checks, the active "
-            "survey source, or why the official poverty estimate is unavailable."
+            "survey source, why the official poverty estimate is unavailable, or any general "
+            "topic outside this project."
         ),
         references=(_page_reference(_FALLBACK_PAGE),),
         grounded=False,
@@ -1007,11 +1023,12 @@ def _classify(text: str) -> str:
         return "injection"
     if any(re.search(pattern, low) for pattern in _PRIVACY_PATTERNS):
         return "privacy"
+    project_context = _PROJECT_TERMS.search(low) is not None
     if re.search(
         r"quality.{0,40}(limitation|caveat|weakness|problem|issue)|"
         r"(limitation|caveat).{0,30}quality",
         low,
-    ):
+    ) and (project_context or "data quality" in low):
         return "quality_limitations"
     if re.search(
         r"(require|required|need|needs|pending).{0,30}(further |more )?(verification|validation|confirm)|"
@@ -1022,24 +1039,50 @@ def _classify(text: str) -> str:
         return "verification_status"
     if "indicators" in low and re.search(
         r"\b(list|available|all|which|what are|explain|describe|show)\b", low
-    ):
+    ) and (project_context or "available" in low or "all indicators" in low):
         return "indicator_catalog"
     poverty_words = ("why", "unavailable", "missing", "blocker", "gated", "not available", "no official")
-    if "poverty" in low and any(word in low for word in poverty_words) and "explain" not in low:
+    if (
+        "poverty" in low
+        and any(word in low for word in poverty_words)
+        and "explain" not in low
+        and (project_context or "official" in low)
+    ):
         return "poverty_blockers"
     if re.search(r"what is insight ?rwanda|tell me about (this|the) (project|app|product|platform)", low):
         return "identity"
-    if re.search(r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|how (is|was|were|are).{0,60}(calculat|comput|derive)", low):
+    if re.search(
+        r"where (did|does|do).{0,60}(come from|derive[ds]?|from)|"
+        r"how (is|was|were|are).{0,60}(calculat|comput|derive)",
+        low,
+    ) and (project_context or _THIS_REFERENCE.search(low) or "reported" in low):
         return "estimate_provenance"
     if re.search(r"is (this|that|it|the).{0,30}official", low):
         return "estimate_provenance"
-    if re.search(r"\bchecks?\b|quality|what was (checked|tested|verified)", low):
+    if re.search(r"\bchecks?\b|quality|what was (checked|tested|verified)", low) and (
+        project_context
+        or re.search(
+            r"checks? (were|was) (performed|run|done)|"
+            r"checks? (do|does|did) (you|this|the (app|project|dashboard|source|survey))|"
+            r"data quality (check|limitation|issue|problem)|"
+            r"quality (control|assurance)",
+            low,
+        )
+    ):
         return "checks"
-    if re.search(r"what (evidence|data|indicators).{0,40}(available|support|cover)|reproducible|coverage", low):
+    if re.search(
+        r"what (evidence|data|indicators).{0,40}(available|support|cover)|"
+        r"reproducible|coverage",
+        low,
+    ) and project_context:
         return "source_evidence"
     if "limitation" in low or "caveat" in low or re.search(r"what (does|do).{0,50}not (measure|include|cover|mean)", low):
         return "limitations"
-    if re.search(r"\bchart\b|\bgraph\b|this (page|view)|page (show|about)", low):
+    if re.search(
+        r"this (page|view|chart|graph)|page (show|about)|"
+        r"what (does|is) (the|this).{0,30}(page|view)",
+        low,
+    ):
         return "page_narrative"
     return "unknown"
 

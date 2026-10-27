@@ -1490,11 +1490,13 @@ def render_poverty_insights(df: pd.DataFrame, profile: SourceProfile) -> None:
     if "income_pressure" in view:
         geo_measures.append(
             weighted_group(view, "province", "income_pressure")
+            .drop(columns="numerator_n")
             .rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
         )
     if "emergency_difficult" in view:
         geo_measures.append(
             weighted_group(view, "province", "emergency_difficult")
+            .drop(columns="numerator_n")
             .rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
         )
     if geo_measures:
@@ -1584,14 +1586,14 @@ def render_regional(df: pd.DataFrame) -> None:
     )
 
     section_head("District explorer", "Sorted by active formal access · filter the geography above to zoom in")
-    district_table = weighted_group(view, "district", "active_access").rename(columns={"value": "active_access", "denominator_n": "active_n"})
-    district_emergency = weighted_group(view, "district", "emergency_fund").rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
+    district_table = weighted_group(view, "district", "active_access").drop(columns="numerator_n").rename(columns={"value": "active_access", "denominator_n": "active_n"})
+    district_emergency = weighted_group(view, "district", "emergency_fund").drop(columns="numerator_n").rename(columns={"value": "emergency_fund", "denominator_n": "emergency_n"})
     district_table = district_table.merge(district_emergency, on="group", how="left").sort_values("active_access", ascending=False)
     if "income_pressure" in view:
-        district_pressure = weighted_group(view, "district", "income_pressure").rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
+        district_pressure = weighted_group(view, "district", "income_pressure").drop(columns="numerator_n").rename(columns={"value": "income_pressure", "denominator_n": "pressure_n"})
         district_table = district_table.merge(district_pressure, on="group", how="left")
     if "emergency_difficult" in view:
-        district_difficulty = weighted_group(view, "district", "emergency_difficult").rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
+        district_difficulty = weighted_group(view, "district", "emergency_difficult").drop(columns="numerator_n").rename(columns={"value": "emergency_difficult", "denominator_n": "difficulty_n"})
         district_table = district_table.merge(district_difficulty, on="group", how="left")
     dleft, dright = st.columns([1.4, .6])
     with dleft:
@@ -2231,7 +2233,7 @@ ASK_GENERAL_STATUS: dict[str, str] = {
                "project answer is shown.",
 }
 ASK_SUMMARY: str = (
-    "Ask questions about Rwanda's financial inclusion and poverty insights."
+    "Ask about Rwanda's financial inclusion and poverty insights — or any general question."
 )
 ASK_PAGE_HINTS: dict[str, str] = {
     "Overview": "FI-01",
@@ -2572,8 +2574,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             "Insight Assistant",
             key="ask_launch",
             icon=":material/forum:",
-            help="Open the InsightRwanda Assistant. Answers use verified project "
-                 "evidence; AI-polished wording runs only when enabled for the deployment.",
+            help="Open the InsightRwanda Assistant. Project questions use verified evidence; "
+                 "general questions are answered by AI when enabled for the deployment.",
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
@@ -2583,7 +2585,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
     badge = (
         f"Verified project evidence · answers stay local"
         if provider is None else
-        f"Verified project evidence · AI wording layer active"
+        f"Verified project evidence · general AI answers active"
     )
 
     with st.container(key="ask_panel"):
@@ -2607,8 +2609,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
         if provider is None:
             st.caption(
-                "AI-polished wording is not enabled for this panel. Answers still use the "
-                "verified project evidence."
+                "General AI answers are not enabled for this panel. Questions about the "
+                "project still use verified evidence."
             )
 
         pending = st.session_state.pop("ask_pending", None)
@@ -2623,11 +2625,11 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                     _ask_render_message(message)
             else:
                 st.markdown(
-                    "<div class='ask-empty'><div class='ask-empty-title'>Ask about verified "
-                    "insights</div><div class='ask-empty-copy'>Answers about the evidence come "
-                    "from this project's approved definitions and loaded survey records. When a "
-                    "question has no verified answer, it may be answered from general knowledge "
-                    "and is labelled as such.</div></div>",
+                    "<div class='ask-empty'><div class='ask-empty-title'>Ask anything</div>"
+                    "<div class='ask-empty-copy'>Answers about the evidence come from this "
+                    "project's approved definitions and loaded survey records. Any other "
+                    "question is answered from general knowledge — with a live web search when "
+                    "available — and is labelled as such.</div></div>",
                     unsafe_allow_html=True,
                 )
 
@@ -2642,7 +2644,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.text_input(
             "Your question",
             key="ask_input",
-            placeholder="Ask a question about the available insights...",
+            placeholder="Ask about the project — or anything else...",
             max_chars=MAX_QUESTION_LENGTH,
             label_visibility="collapsed",
             on_change=_ask_queue,
@@ -2654,7 +2656,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 key="ask_send",
                 type="primary",
                 width="stretch",
-                help="Send your question to the evidence assistant.",
+                help="Send your question to the assistant.",
                 on_click=_ask_queue,
             )
         with controls[1]:

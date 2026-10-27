@@ -126,6 +126,24 @@ class RoutingTests(AssistantUnitTestBase):
                 self.assertEqual(answer.question_kind, kind)
                 self.assertTrue(answer.answer.strip())
 
+    def test_ordinary_general_questions_reach_the_general_answer_path(self):
+        questions = (
+            "How is inflation calculated?",
+            "Where does rain come from?",
+            "What are the checks in chess?",
+            "What is quality of life in Kigali?",
+            "Where did democracy come from?",
+            "What evidence supports climate change?",
+            "What are the indicators of climate change?",
+            "Show me a chart of global warming.",
+            "What is data quality?",
+        )
+        for question in questions:
+            with self.subTest(question=question):
+                answer = self.ask(question)
+                self.assertEqual(answer.question_kind, "fallback")
+                self.assertFalse(answer.grounded)
+
     def test_indicator_id_is_resolved_from_free_text_and_ids(self):
         self.assertEqual(resolve_indicator("Explain FI-03 briefly"), "FI-03")
         self.assertEqual(resolve_indicator("what does mobile money mean"), "FI-02")
