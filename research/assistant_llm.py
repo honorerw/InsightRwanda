@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Optional Groq wording layer for Ask InsightRwanda.
 
 DESIGN
@@ -78,8 +77,6 @@ FAIL-CLOSED BEHAVIOUR
 No automatic retries are made (the SDK's default retries are disabled), and no
 paid fallback provider is used.
 """
-=======
->>>>>>> 682a4c9 (commited by dna)
 
 from __future__ import annotations
 
@@ -120,30 +117,22 @@ __all__ = [
     "restore_wording",
     "wording_preserves_evidence",
 ]
-<<<<<<< HEAD
 
 #: Production text model currently listed by Groq; override after checking the
 #: live model catalogue and the account's rate limits.
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
 _MODEL_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._/-]{1,80}$")
-=======
-GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite"
-_MODEL_PATTERN = re.compile(r"^gemini-[a-z0-9][a-z0-9.\-]{1,80}$")
->>>>>>> 682a4c9 (commited by dna)
 
 DEFAULT_TIMEOUT_SECONDS = 20.0
 MAX_OUTPUT_TOKENS = 1_200
 MAX_WORDING_CHARS = 4_000
 MAX_PAYLOAD_CHARS = 12_000
-<<<<<<< HEAD
 
 # Documentation answers that may leave the app after figure redaction. These
 # are definitions, methods, documented limitations, catalogue text and the
 # public project identity. Every figure in them is tokenised first. Kinds that
 # describe restricted source inventory, publication status or page narratives
 # are deliberately absent: their permission is not established.
-=======
->>>>>>> 682a4c9 (commited by dna)
 _EXTERNALLY_SHAREABLE_KINDS = frozenset({
     "explain_indicator",
     "indicator_catalog",
@@ -190,7 +179,6 @@ GENERAL_GUIDANCE = (
 
 
 class ProviderError(Exception):
-<<<<<<< HEAD
     """Base class: any Groq failure. Users see only our safe status text."""
 
 
@@ -224,25 +212,6 @@ def _usable_text(completion: Any) -> str:
     if len(cleaned) > MAX_WORDING_CHARS:
         raise ProviderInvalidResponse("Groq returned an oversized response")
     return cleaned
-=======
-    pass
-
-
-class ProviderTimeout(ProviderError):
-    pass
-
-
-class ProviderRateLimited(ProviderError):
-    pass
-
-
-class ProviderAuthError(ProviderError):
-    pass
-
-
-class ProviderInvalidResponse(ProviderError):
-    pass
->>>>>>> 682a4c9 (commited by dna)
 
 
 @dataclass(frozen=True)
@@ -285,14 +254,11 @@ def payload_within_limits(payload: ExplanationPayload) -> bool:
 
 
 def payload_has_raw_figures(payload: ExplanationPayload) -> bool:
-<<<<<<< HEAD
     """True if the question or answer still has a digit outside a token/citation.
 
     Defence in depth: ``refine_answer_with_status`` redacts both fields first,
     and the provider refuses to transmit a payload that bypassed that step.
     """
-=======
->>>>>>> 682a4c9 (commited by dna)
 
     probe = _PLACEHOLDER.sub("", f"{payload.question}\n{payload.verified_answer}")
     probe = _QUESTION_PLACEHOLDER.sub("", probe)
@@ -332,7 +298,6 @@ def _translate_provider_error(exc: Exception) -> ProviderError:
     return ProviderError("Groq request failed")
 
 
-<<<<<<< HEAD
 class GroqProvider:
     """Reword verified answers through Groq's official Python SDK.
 
@@ -341,9 +306,6 @@ class GroqProvider:
     repeated requests. The key and client are never included in a
     representation or exception.
     """
-=======
-class GeminiProvider:
->>>>>>> 682a4c9 (commited by dna)
 
     name = "groq"
 
@@ -387,10 +349,7 @@ class GeminiProvider:
         return f"GroqProvider(model={self._model!r})"
 
     def explain(self, payload: ExplanationPayload) -> str:
-<<<<<<< HEAD
         """Return Groq's reworded text, or raise a ProviderError subclass."""
-=======
->>>>>>> 682a4c9 (commited by dna)
 
         if not payload_within_limits(payload):
             raise ProviderInvalidResponse("payload is too large")
@@ -417,22 +376,8 @@ class GeminiProvider:
             request["reasoning_effort"] = "low"
             request["reasoning_format"] = "hidden"
         try:
-<<<<<<< HEAD
             completion = self._client.chat.completions.create(**request)
         except Exception as exc:  # every provider failure stays contained
-=======
-            interaction = self._client.interactions.create(
-                model=self._model,
-                system_instruction=REWRITE_GUIDANCE,
-                input=input_text,
-                generation_config={
-                    "max_output_tokens": MAX_OUTPUT_TOKENS,
-                    "thinking_level": "low",
-                },
-                timeout=self._timeout,
-            )
-        except Exception as exc:
->>>>>>> 682a4c9 (commited by dna)
             raise _translate_provider_error(exc) from None
         return _usable_text(completion)
 
@@ -478,15 +423,12 @@ def get_configured_provider(
     environ: Mapping[str, str] | None = None,
     client: Any | None = None,
 ) -> ExplanationProvider | None:
-<<<<<<< HEAD
     """Return a Groq provider, or None when the deployment is not configured.
 
     The caller passes the key it read from Streamlit secrets; otherwise
     ``GROQ_API_KEY`` in the environment is used. No key means no provider, no
     import attempt, no network. A malformed model or client setup fails closed.
     """
-=======
->>>>>>> 682a4c9 (commited by dna)
 
     env = os.environ if environ is None else environ
     key = str(api_key if api_key is not None else env.get("GROQ_API_KEY", "")).strip()
@@ -531,7 +473,6 @@ def _drop_public_citations(text: str) -> str:
     return _PUBLIC_CITATION.sub("", text)
 
 
-<<<<<<< HEAD
 def redact_figures(text: str, *, prefix: str = "V") -> tuple[str, dict[str, str]]:
     """Replace every survey figure with a local placeholder.
 
@@ -543,9 +484,6 @@ def redact_figures(text: str, *, prefix: str = "V") -> tuple[str, dict[str, str]
     deliberately left readable. The mapping never leaves the process; only
     ``redacted`` is placed in an ``ExplanationPayload``.
     """
-=======
-def redact_figures(text: str) -> tuple[str, dict[str, str]]:
->>>>>>> 682a4c9 (commited by dna)
 
     if prefix not in {"V", "Q"}:  # only the two intentional namespaces
         raise ValueError("unsupported placeholder prefix")

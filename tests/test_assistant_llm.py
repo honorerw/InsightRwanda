@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Tests for research.assistant_llm — the optional Groq wording layer.
 
 Everything here uses stub clients/providers. No test reads a real key, touches
@@ -7,8 +6,6 @@ gate, successful wording, invalid keys, quotas, timeouts, network failures,
 input limits, privacy filtering and the figure-redaction guard.
 """
 
-=======
->>>>>>> 682a4c9 (commited by dna)
 from __future__ import annotations
 
 import unittest

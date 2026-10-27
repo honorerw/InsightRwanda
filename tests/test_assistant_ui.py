@@ -151,12 +151,8 @@ class AssistantPanelUiTests(unittest.TestCase):
     def test_configuration_and_privacy_notes_are_visible(self) -> None:
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
-<<<<<<< HEAD
         # End-user language only: no developer setup words in the visible panel.
         self.assertIn("AI-polished wording is not enabled", rendered)
-=======
-        self.assertIn("Optional wording is not configured here", rendered)
->>>>>>> 682a4c9 (commited by dna)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertNotIn("not an official NISR conclusion", rendered)
         self.assertNotIn("replaced locally before sending", rendered)

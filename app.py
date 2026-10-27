@@ -51,10 +51,7 @@ from research.joint import (
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import AssistantChart, MAX_QUESTION_LENGTH, answer_question, answer_with_chart
 from research.assistant_llm import (
-<<<<<<< HEAD
     answer_general_with_status,
-=======
->>>>>>> 682a4c9 (commited by dna)
     get_configured_provider,
     refine_answer_with_status,
 )
@@ -2194,7 +2191,6 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
         return
 
 
-<<<<<<< HEAD
 # -----------------------------------------------------------------------------
 # Ask InsightRwanda — evidence-based assistant UI
 # Every number is produced by research/assistant.py from the loaded survey
@@ -2233,30 +2229,6 @@ ASK_GENERAL_STATUS: dict[str, str] = {
                    "project answer is shown instead.",
     "refused": "For safety, nothing was sent to the AI service for this question. The offline "
                "project answer is shown.",
-=======
-ASK_SUGGESTIONS: tuple[str, ...] = (
-    "What does financial inclusion mean?",
-    "Explain the available financial inclusion indicators.",
-    "What are the main data quality limitations?",
-    "How are the reported indicators calculated?",
-    "Which findings require further verification?",
-)
-ASK_AI_STATUS: dict[str, str] = {
-    "disabled": "This answer uses the verified project rules and remains local.",
-    "blocked": "This answer remains local because its evidence is not approved for external sharing.",
-    "rate_limited": "The optional wording service reached its usage limit. The verified project "
-                    "answer is shown unchanged; please try again later.",
-    "invalid_key": "The optional wording service could not authenticate. The verified project "
-                   "answer is shown unchanged.",
-    "timeout": "The optional wording service did not respond in time. The verified project "
-               "answer is shown unchanged; no retry was attempted.",
-    "invalid_response": "The optional wording service returned no usable text. The verified "
-                        "project answer is shown unchanged.",
-    "unavailable": "The optional wording service is temporarily unavailable. The verified project "
-                   "answer is shown unchanged.",
-    "guard_rejected": "The optional wording changed a protected figure or added a new one, so it "
-                      "was discarded. The verified project answer is shown unchanged.",
->>>>>>> 682a4c9 (commited by dna)
 }
 ASK_SUMMARY: str = (
     "Ask questions about Rwanda's financial inclusion and poverty insights."
@@ -2359,7 +2331,6 @@ def _ask_queue(question: str | None = None) -> None:
     st.session_state["ask_pending"] = question
 
 
-<<<<<<< HEAD
 def _ask_setting(name: str) -> str:
     """Read an assistant setting from Streamlit secrets, then the environment."""
 
@@ -2385,16 +2356,6 @@ def _ask_provider():
     if provider is not None:
         return provider
     key = _ask_setting("GROQ_API_KEY")
-=======
-def _ask_provider():
-    key = ""
-    try:
-        key = str(st.secrets.get("GEMINI_API_KEY", "") or "").strip()
-    except Exception:
-        key = ""
-    if not key:
-        key = str(os.environ.get("GEMINI_API_KEY", "") or "").strip()
->>>>>>> 682a4c9 (commited by dna)
     if not key:
         return None
     try:
@@ -2486,7 +2447,6 @@ def _ask_process(
         })
         st.session_state["ask_input"] = ""
         return
-<<<<<<< HEAD
     # Optional Groq layers. Both stay off unless the deployment sets
     # GROQ_API_KEY. The wording layer receives only an already-grounded answer
     # whose figures have been replaced with local tokens, and any provider
@@ -2495,8 +2455,6 @@ def _ask_process(
     # verified evidence: the typed question alone may then be sent (no survey
     # figure, record or identifier), the answer is labelled as model knowledge,
     # and any provider failure falls back to the deterministic answer.
-=======
->>>>>>> 682a4c9 (commited by dna)
     provider = _ask_provider()
     if answer.question_kind == "fallback" and provider is not None:
         general_text, general_status = answer_general_with_status(question, provider)
@@ -2578,15 +2536,9 @@ def _ask_render_message(message: dict[str, object]) -> None:
             status = message.get("ai_status")
             if message.get("general") is True:
                 st.markdown(
-<<<<<<< HEAD
                     "<div class='ask-state'>General AI answer — general AI knowledge, "
                     "<strong>not</strong> from this survey's verified data. Survey figures "
                     "belong to the dashboard pages; check anything else before relying on it.</div>",
-=======
-                    "<div class='ask-state'>Refined wording from verified project evidence "
-                    f"({redacted} figure placeholder(s) restored locally; no survey figure was "
-                    "sent). Check important details against the sources.</div>",
->>>>>>> 682a4c9 (commited by dna)
                     unsafe_allow_html=True,
                 )
             elif isinstance(status, str) and message.get("general_attempt") is True and status in ASK_GENERAL_STATUS:
@@ -2618,13 +2570,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             "Insight Assistant",
             key="ask_launch",
             icon=":material/forum:",
-<<<<<<< HEAD
             help="Open the InsightRwanda AI Assistant. Answers use verified project "
                  "evidence; AI-polished wording runs only when enabled for the deployment.",
-=======
-            help="Open the InsightRwanda Assistant. Answers use verified project evidence; "
-                 "optional wording refinement runs only when configured.",
->>>>>>> 682a4c9 (commited by dna)
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
@@ -2632,27 +2579,15 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
 
     provider = _ask_provider()
     badge = (
-<<<<<<< HEAD
         f"Verified project evidence · answers stay local"
         if provider is None else
         f"Verified project evidence · AI wording layer active"
-=======
-        "Verified project rules · answers stay local"
-        if provider is None else
-        "Optional wording · figures are replaced with local tokens before sending · "
-        "review important details"
->>>>>>> 682a4c9 (commited by dna)
     )
 
     with st.container(key="ask_panel"):
         st.markdown(
-<<<<<<< HEAD
             "<div class='ask-head'><img class='ask-mark' src='" + logo_data_uri() + "' alt='InsightRwanda logo'>"
             "<div><div class='ask-title'>InsightRwanda AI Assistant</div>"
-=======
-            "<div class='ask-head'><span class='ask-mark' aria-hidden='true'>◒</span>"
-            "<div><div class='ask-title'>InsightRwanda Assistant</div>"
->>>>>>> 682a4c9 (commited by dna)
             f"<div class='ask-subtitle'>{ASK_SUMMARY}</div></div></div>",
             unsafe_allow_html=True,
         )
@@ -2670,13 +2605,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
         if provider is None:
             st.caption(
-<<<<<<< HEAD
                 "AI-polished wording is not enabled for this panel. Answers still use the "
                 "verified project evidence."
-=======
-                "Optional wording is not configured here. Answers still use the verified project "
-                "rules."
->>>>>>> 682a4c9 (commited by dna)
             )
 
         pending = st.session_state.pop("ask_pending", None)
@@ -2692,17 +2622,10 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             else:
                 st.markdown(
                     "<div class='ask-empty'><div class='ask-empty-title'>Ask about verified "
-<<<<<<< HEAD
                     "insights</div><div class='ask-empty-copy'>Answers about the evidence come "
                     "from this project's approved definitions and loaded survey records. When a "
                     "question has no verified answer, it may be answered from general knowledge "
                     "and is labelled as such.</div></div>",
-=======
-                    "insights</div><div class='ask-empty-copy'>Answers come from this project's "
-                    "approved definitions and loaded survey records — never from outside "
-                    "knowledge. Survey figures are replaced with local tokens before any wording "
-                    "refinement request. Start with one of these:</div></div>",
->>>>>>> 682a4c9 (commited by dna)
                     unsafe_allow_html=True,
                 )
 
@@ -2741,15 +2664,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 on_click=_ask_clear,
             )
         st.markdown(
-<<<<<<< HEAD
             "<div class='ask-foot'>Do not enter personal or household-level details in your "
             "questions.</div>",
-=======
-            "<div class='ask-foot'>Do not enter personal or household-level details. Only your "
-            "question and approved project wording are sent when optional wording is configured; "
-            "survey figures are replaced locally before sending. Refined wording may contain "
-            "errors and is not an official NISR conclusion.</div>",
->>>>>>> 682a4c9 (commited by dna)
             unsafe_allow_html=True,
         )
 
