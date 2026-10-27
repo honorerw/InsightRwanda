@@ -57,7 +57,7 @@ and identifier exclusion).
 
 The floating **AI Assistant** button at the bottom-right of every page opens an
 in-screen chat panel — no external website, no page reload. The panel keeps its
-conversation in Streamlit session state, offers example questions, a loading
+conversation in Streamlit session state, shows a loading
 indicator, a **New conversation** action, and a **Close** button.
 
 The assistant is **evidence-first**:
@@ -67,19 +67,36 @@ The assistant is **evidence-first**:
   quality checks, navigation and data-governance status. Numeric answers are
   computed live from the loaded survey records at the active lens, with the
   survey's household weight and visible denominators.
+- Ask for a graph and the assistant shows one: a bar chart of the indicator's
+  verified weighted share by province, district or urban/rural setting (for
+  example “Show FI-04 by province as a bar chart”), with the numbers behind it
+  in a table under the chart. Chart numbers come from the same tested
+  calculation functions as every dashboard figure.
 - It refuses household-level or personal requests and says plainly when
   information is unavailable or unverified; it never invents statistics,
   sources, intervals, geographic findings or research conclusions.
-- The optional Groq layer (`research/assistant_llm.py`) can **only reword**
-  an already-verified answer. It never chooses statistics, adds citations or
+- The optional Groq layer (`research/assistant_llm.py`) has two strictly
+  separated jobs:
+
+  **General knowledge.** When the offline core has no verified evidence for a
+  question and Groq is configured, the question alone (no survey figure,
+  record or project metadata — the same email/key/identifier block applies)
+  may be answered from the model's background knowledge. The answer is always
+  labelled **“General AI answer — not from this survey's verified data”**; the
+  model is instructed to never state or compute statistics about the survey
+  data. With no key configured, such questions get the honest local fallback.
+
+  **Wording only.** For evidence answers, Groq can **only reword** an
+  already-verified answer. It never chooses statistics, adds citations or
   changes a publication/authorisation gate. Every figure in both the question
   and the answer is replaced locally with a placeholder (`⟦Q1⟧` for the
   question, `⟦V1⟧`, `⟦V2⟧`, … for the answer) before transmission, and
   restored only if the returned wording preserves every figure and adds none.
   Questions containing an email address, key-like token or explicit identifier
   phrase are blocked.
-- On a missing key, quota/rate limit, invalid key, timeout, network failure or
-  a changed figure, the verified answer is shown unchanged. There are no
+- On a missing key, quota/rate limit, invalid key, timeout, network failure,
+  a changed figure or a failed general-knowledge send, the deterministic
+  answer is shown unchanged, with a plain status explaining why. There are no
   automatic retries and no paid fallback provider.
 
 ### Enable Groq locally
@@ -124,9 +141,10 @@ configured by the app.
 
 Groq's data policy states that inference inputs and outputs are not retained by
 default, though they may be logged for up to 30 days for reliability and abuse
-monitoring unless the organisation enables Zero Data Retention. The assistant
-sends only non-sensitive, already-displayed documentation, with every survey
-figure redacted; raw records, identifiers, file paths, source inventory and
+monitoring unless the organisation enables Zero Data Retention. For evidence
+answers only non-sensitive, already-displayed documentation is sent, with every
+survey figure redacted; for general-knowledge answers only the user's typed
+question is sent. Raw records, identifiers, file paths, source inventory and
 unpublished/restricted outputs are never transmitted. If that external sharing
 is not acceptable for your deployment, leave `GROQ_API_KEY` unset — the
 assistant continues to work entirely locally.

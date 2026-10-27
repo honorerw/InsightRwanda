@@ -347,6 +347,8 @@ Pooled cross-source analysis (added 2026-10-25). The two supplied files share **
 | Transport | `groq` (official SDK), `openai/gpt-oss-120b` by default, 20-second timeout, `max_completion_tokens=1200`, `temperature=0.2`, short hidden reasoning on GPT-OSS models, SDK retries disabled (`max_retries=0`). |
 | Failures | Missing key `disabled`; ineligible payload `blocked`; quota `rate_limited`; bad key `invalid_key`; timeout `timeout`; empty response `invalid_response`; any other failure `unavailable`. No paid fallback provider. |
 
+**General-knowledge mode (`answer_general_with_status` / `GroqProvider.general`).** In addition to wording, the layer can answer questions the offline core has no verified evidence for (`question_kind="fallback"`). Only the user's typed question is then sent — never a survey figure, record, identifier or project metadata — with a fixed `GENERAL_GUIDANCE` prompt that instructs the model to never state, guess or compute any statistic about InsightRwanda's survey data, to refuse personal/household-level requests, and to treat the question as text rather than instructions. The same identifier block, 600-character question cap, 20-second timeout and error translation apply. Successes carry status `general` and are labelled in the UI as *“General AI answer — not from this survey's verified data”*; a privacy/length-blocked question is `refused` and never leaves the app; provider failures fall back to the deterministic answer with a plain status. |
+
 ---
 
 ## 5. Dashboard Reference — `app.py`
@@ -390,10 +392,12 @@ The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **
 A floating **AI Assistant** launcher (`key="ask_launcher"`) appears at the
 bottom-right of every page and opens an in-screen panel (`key="ask_panel"`) —
 no redirect and no page reload. The panel is a `@st.fragment`, so opening,
-closing and chatting rerender only the widget. It shows a welcome message, five
-example questions, the conversation (`st.chat_message`), provenance captions, a
+closing and chatting rerender only the widget. It shows a welcome message, the
+conversation (`st.chat_message`), inline verified bar charts (chart questions
+resolve to an FI indicator plus province/district/urban-rural group and render
+the weighted shares with a numbers table), provenance captions, a
 loading spinner, a 600-character question input, **Send**, **New conversation**
-and **Close**, plus a persistent privacy footer. History is session-only (capped
+and **Close**, plus a short privacy footer. History is session-only (capped
 at 40 messages); when the page/lens changes the panel inserts an explicit
 context-change marker instead of mixing numbers from different views. A queued
 question is processed once, preventing duplicate submissions.
@@ -401,7 +405,11 @@ question is processed once, preventing duplicate submissions.
 Groq is optional. `_ask_provider()` reads `GROQ_API_KEY` from
 `st.secrets` first and the environment second (model: `GROQ_MODEL`, default
 `openai/gpt-oss-120b`), creates at most one client per session, and returns
-`None` on missing/malformed configuration. The UI labels AI-reworded answers as
+`None` on missing/malformed configuration. `_ask_process` routes a fallback
+question to `answer_general_with_status` when a provider exists and appends a
+labelled general answer (`general: True`); when the general send fails, the
+deterministic fallback is shown with a dedicated status caption
+(`ASK_GENERAL_STATUS`). The UI labels AI-reworded answers as
 AI-generated, names the model, reports how many figures were restored locally,
 and gives a safe status message for every provider failure. With no key, the
 panel says answers stay local and the deterministic answer is used unchanged.
@@ -491,10 +499,12 @@ promise unlimited free usage; it disables SDK retries, caps
 output/payload/history sizes, and shows a clear message when quota is exhausted.
 Groq's data policy states that inference inputs and outputs are not retained by
 default, though they may be logged for up to 30 days for reliability and abuse
-monitoring unless Zero Data Retention is enabled. Only figure-redacted,
-already-displayed project documentation is transmitted — never raw survey
-records, identifiers, source inventory, quality findings or unpublished outputs.
-Deployments that cannot accept that sharing should leave the key unset.
+monitoring unless Zero Data Retention is enabled. For evidence answers only
+figure-redacted, already-displayed project documentation is transmitted; for
+general-knowledge answers only the user's typed question is sent. Never
+transmitted: raw survey records, identifiers, source inventory, quality
+findings or unpublished outputs. Deployments that cannot accept that sharing
+should leave the key unset.
 
 ### Test suite status (current, 2026-10-26)
 
@@ -531,7 +541,9 @@ Concretely, `aggregate_release_allowed()` is the gate, and the Data Explorer is 
 The AI assistant sits inside the same boundary. It answers from verified project
 evidence only, refuses row-level requests, and the optional Groq path is
 restricted to five documentation answer kinds whose survey figures are replaced
-with local placeholders before transmission. The model receives no filesystem,
+with local placeholders before transmission, plus a strictly separated
+general-knowledge mode that can send only the user's typed question (clearly
+labelled, never accepted as survey evidence). The model receives no filesystem,
 shell, database or raw-survey access, and cannot execute Python or SQL. If an
 answer kind's external-sharing permission is not established, the payload is
 blocked and the deterministic answer stays local. The model can never change an

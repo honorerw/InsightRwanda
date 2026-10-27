@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import html
 import os
 from pathlib import Path
@@ -48,9 +49,9 @@ from research.joint import (
     weighted_correlation,
 )
 from research.quality import QualityCheck, quality_summary, run_quality_checks
-from research.assistant import MAX_QUESTION_LENGTH, answer_question
+from research.assistant import AssistantChart, MAX_QUESTION_LENGTH, answer_question, answer_with_chart
 from research.assistant_llm import (
-    GROQ_DEFAULT_MODEL,
+    answer_general_with_status,
     get_configured_provider,
     refine_answer_with_status,
 )
@@ -58,6 +59,7 @@ from research.assistant_llm import (
 
 APP_DIR = Path(__file__).resolve().parent
 DATA_PATH = APP_DIR / "data" / "FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta"
+LOGO_PATH = APP_DIR / "assets" / "insight_rwanda_logo.png"
 SPSS_PATH = APP_DIR / "data" / "Rwanda FinScope 2020_Final Data.sav"
 
 COMBINED_SOURCE_ID = "insightrwanda_combined"
@@ -92,7 +94,7 @@ def apply_year_filter(frame: pd.DataFrame, choice: str) -> pd.DataFrame:
 
 st.set_page_config(
     page_title="InsightRwanda | Research Analytics",
-    page_icon="◒",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "◒",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -177,7 +179,7 @@ footer { display: none !important; }
   width:100% !important; justify-content:center !important; border-radius:10px; padding:.5rem .3rem !important; }
 [data-testid="stSidebar"] button[title="Collapse or expand the sidebar"]:hover { background:#e2f0e8; border-color:#cfe0d5; }
 [data-testid="stSidebar"] button[title="Collapse or expand the sidebar"] svg { fill:#059669; }
-.side-mark { width:36px; height:36px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:11px; background:linear-gradient(145deg, #34d399, #059669); color:#fff; font-family:'Roboto', Arial, Verdana, sans-serif; font-weight:700; box-shadow:0 6px 16px rgba(5,150,105,.22); }
+.side-mark { width:48px; height:48px; flex:none; }
 .side-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:.98rem; font-weight:600; letter-spacing:-.01em; color:#17213d; }
 [data-testid="stSidebar"] .side-caption { color:#5b6f66 !important; font-size:.65rem; line-height:1.5; margin:.12rem .15rem .2rem; }
 [data-testid="stSidebar"] .side-label { color:#6b8276 !important; font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.14em; font-size:.6rem; font-weight:500; margin:1rem .35rem .45rem; padding-top:.8rem; border-top:1px solid #d8e8dd; }
@@ -236,8 +238,9 @@ footer { display: none !important; }
   background:radial-gradient(closest-side, rgba(5,150,105,.09), transparent 70%); pointer-events:none; }
 .app-header > * { position:relative; z-index:1; }
 .brand { display:flex; align-items:center; gap:.85rem; }
-.brand-mark { position:relative; width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(145deg, #34d399, #059669); color:white; display:flex; align-items:center; justify-content:center; font-family:'Roboto', Arial, Verdana, sans-serif; font-size: 1.25rem; font-weight:700; box-shadow: 0 10px 24px rgba(5,150,105,.25); }
-.brand-mark::after { content:''; position:absolute; inset:-5px; border-radius:18px; border:1px solid rgba(5,150,105,.22); }
+/* Transparent-background logo: no chip, no ring, no box shadow — the artwork stands on the page. */
+.brand-mark { width: 64px; height: 64px; flex:none; }
+.brand-mark img, .side-mark img { width:100%; height:100%; object-fit:contain; display:block; }
 .brand-name { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:1.12rem; font-weight:700; letter-spacing:-.01em; color:var(--ink); }
 .brand-name span { color:var(--green); }
 .brand-sub { color: var(--muted); font-size:.72rem; margin-top:.16rem; letter-spacing:.01em; }
@@ -346,10 +349,7 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .st-key-ask_panel > div { max-width: 100%; }
 .st-key-ask_panel [data-testid="stVerticalBlockBorderWrapper"] { row-gap: .5rem; }
 .ask-head { display: flex; gap: .55rem; align-items: flex-start; padding-right: 4.9rem; }
-.ask-mark { width: 32px; height: 32px; flex: none; border-radius: 10px;
-  background: linear-gradient(135deg, #3155d4, #2443b8); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 1rem;
-  box-shadow: 0 4px 10px rgba(49,85,212,.3); }
+.ask-mark { width: 42px; height: 42px; flex: none; border-radius: 10px; }
 .ask-title { font-weight: 800; font-size: .92rem; color: var(--ink); line-height: 1.3; }
 .ask-subtitle { font-size: .72rem; color: var(--muted); line-height: 1.4; margin-top: .1rem; }
 .st-key-ask_close { position: absolute; top: .55rem; right: .6rem; z-index: 2; width: auto; }
@@ -399,7 +399,7 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   /* The top strip hosts Streamlit's auto-collapse *expand* control; keep page content clear of it */
   .block-container { padding: 4.55rem .85rem 6rem; }
   .app-header { flex-wrap: wrap; align-items:flex-start; gap:.65rem; padding:.85rem .95rem; border-radius:15px; }
-  .brand-mark { width:36px; height:36px; border-radius:11px; font-size:1.02rem; }
+  .brand-mark { width:44px; height:44px; }
   .brand-mark::after { inset:-4px; }
   .brand-name { font-size:1.02rem; }
   .page-title { font-size:1.52rem; }
@@ -467,12 +467,19 @@ def pct(value: float, decimals: int = 0) -> str:
 # -----------------------------------------------------------------------------
 # UI helpers
 # -----------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def logo_data_uri() -> str:
+    """Inline data URI for the system logo; embedded once, encoded per process."""
+
+    return "data:image/png;base64," + base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+
+
 def app_header() -> None:
     st.markdown(
         f"""
         <div class="app-header">
           <div class="brand">
-            <div class="brand-mark">◒</div>
+            <div class="brand-mark"><img src="{logo_data_uri()}" alt="InsightRwanda logo"></div>
             <div><div class="brand-name">Insight<span>Rwanda</span></div><div class="brand-sub">Financial inclusion &amp; poverty research · NISR Hackathon 2026</div></div>
           </div>
           <div class="header-meta">
@@ -620,7 +627,8 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
         brand_cols = st.columns([1, .22], gap="small", vertical_alignment="center")
         with brand_cols[0]:
             st.markdown(
-                '<div class="side-brand"><div class="side-mark">◒</div><div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
+                f'<div class="side-brand"><div class="side-mark"><img src="{logo_data_uri()}" alt="InsightRwanda logo"></div>'
+                '<div><div class="side-name">InsightRwanda</div><div class="side-caption">Research analytics platform</div></div></div>',
                 unsafe_allow_html=True,
             )
         with brand_cols[1]:
@@ -919,8 +927,9 @@ def render_model_evaluation_tab(view: pd.DataFrame) -> None:
                 "An uncertain analytical estimate for a composed household, not a label about any existing household. "
                 "The context variables not entered here are held at training-typical values."
             )
-        except (ValueError, KeyError) as error:
-            st.error(f"Prediction could not be produced: {error}")
+        except (ValueError, KeyError):
+            st.error("Prediction could not be produced with the entered values. Check the "
+                     "numbers and try again.")
 
     st.caption(
         f"Reproducibility: seed {record.config['seed']} · {record.config['n_splits']}-fold StratifiedGroupKFold on the respondent key · "
@@ -1685,6 +1694,10 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
 
 
 def render_about(df: pd.DataFrame) -> None:
+    if LOGO_PATH.exists():
+        _left_logo, _right_about = st.columns([1, 2.2], gap="medium", vertical_alignment="center")
+        with _left_logo:
+            st.image(str(LOGO_PATH), width=190)
     page_intro(
         "10 / About the build",
         "A competition-ready decision tool, grounded in NISR data.",
@@ -1870,30 +1883,37 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
 # its figures are replaced locally; with no configured key nothing leaves the
 # app and the deterministic answer is shown unchanged.
 # -----------------------------------------------------------------------------
-ASK_SUGGESTIONS: tuple[str, ...] = (
-    "What does financial inclusion mean?",
-    "Explain the available financial inclusion indicators.",
-    "What are the main data quality limitations?",
-    "How are the reported indicators calculated?",
-    "Which findings require further verification?",
-)
 ASK_AI_STATUS: dict[str, str] = {
-    "disabled": "Groq is not configured on this deployment, so this answer uses the verified "
-                "project rules only. An administrator can add GROQ_API_KEY to enable AI wording.",
+    "disabled": "AI-polished wording is not enabled for this panel yet, so this answer uses "
+                "the verified project rules as written.",
     "blocked": "This answer was kept entirely local because its evidence is not approved for "
                "external sharing. No text from it was sent to an AI provider.",
-    "rate_limited": "Groq's quota or rate limit was reached. The verified project answer is shown "
-                    "unchanged; please try again later.",
-    "invalid_key": "Groq rejected the configured API key. The verified project answer is shown "
-                   "unchanged; an administrator should check the deployment secret.",
-    "timeout": "Groq did not respond in time. The verified project answer is shown unchanged; "
-               "no retry was attempted.",
-    "invalid_response": "Groq returned no usable text. The verified project answer is shown "
-                        "unchanged.",
-    "unavailable": "The Groq wording layer is temporarily unavailable. The verified project "
+    "rate_limited": "The AI wording service is busy right now. The verified project answer is "
+                    "shown unchanged; please try again later.",
+    "invalid_key": "AI-polished wording is temporarily unavailable. The verified project answer "
+                   "is shown unchanged.",
+    "timeout": "The AI wording service did not respond in time. The verified project answer is "
+               "shown unchanged.",
+    "invalid_response": "The AI wording service returned no usable text. The verified project "
+                        "answer is shown unchanged.",
+    "unavailable": "The AI wording service is temporarily unavailable. The verified project "
                    "answer is shown unchanged.",
-    "guard_rejected": "Groq's wording changed a protected figure or added a new one, so it was "
-                      "discarded. The verified project answer is shown unchanged.",
+    "guard_rejected": "A protective check stopped the AI wording because it altered a verified "
+                      "figure. The verified project answer is shown unchanged.",
+}
+ASK_GENERAL_STATUS: dict[str, str] = {
+    "rate_limited": "The general-knowledge service is busy right now. The offline project "
+                    "answer is shown instead.",
+    "invalid_key": "The general-knowledge service is temporarily unavailable. The offline "
+                   "project answer is shown instead.",
+    "timeout": "The general-knowledge service did not respond in time. The offline project "
+               "answer is shown instead.",
+    "invalid_response": "The general-knowledge service returned no usable text. The offline "
+                        "project answer is shown instead.",
+    "unavailable": "The general-knowledge service is temporarily unavailable. The offline "
+                   "project answer is shown instead.",
+    "refused": "For safety, nothing was sent to the AI service for this question. The offline "
+               "project answer is shown.",
 }
 ASK_SUMMARY: str = (
     "Ask questions about Rwanda's financial inclusion and poverty insights."
@@ -1911,6 +1931,35 @@ def ask_indicator_hint(page: str) -> str:
     """The indicator most relevant to the current page, for “this indicator” questions."""
 
     return ASK_PAGE_HINTS.get(page, "")
+
+
+def _ask_chart_figure(chart: AssistantChart) -> go.Figure:
+    """Compact bar chart for chat: verified shares, sorted highest to lowest."""
+
+    labels = [name for name, _share in chart.rows]
+    values = [share * 100 for _name, share in chart.rows]
+    fig = go.Figure(go.Bar(
+        x=labels,
+        y=values,
+        marker_color="#059669",
+        text=[f"{value:.1f}%" for value in values],
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
+    ))
+    fig.update_layout(
+        title=dict(text=chart.title, font=dict(size=13, color="#17213d"), x=0, automargin=True),
+        yaxis=dict(title="Weighted share", ticksuffix=" %", range=[0, max(values) * 1.18 + 2]),
+        height=250,
+        margin=dict(l=40, r=16, t=34, b=16),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=10.5, color="#17213d"),
+        bargap=0.28,
+    )
+    fig.update_xaxes(showgrid=False, zeroline=False, linecolor="#dce3ef", tickangle=0)
+    fig.update_yaxes(showgrid=True, gridcolor="#e8ecf5", zeroline=False, linecolor="rgba(0,0,0,0)")
+    return fig
 
 
 def ask_bullets(text: str) -> str:
@@ -2039,6 +2088,29 @@ def _ask_process(
     if len(messages) >= ASK_HISTORY_LIMIT:
         del messages[: len(messages) - (ASK_HISTORY_LIMIT - 2)]
     messages.append({"role": "user", "content": question})
+    # Chart requests get a verified text answer plus a live group breakdown
+    # computed with the same tested functions as every dashboard figure. On
+    # this path the AI wording layer is skipped entirely: the message's
+    # numbers must equal the dashboard's exactly, with no rewording risk.
+    pair = answer_with_chart(
+        question,
+        frame=view,
+        profile=profile,
+        source_label=COMBINED_LABEL,
+        lens_note=lens_note,
+        indicator_hint=ask_indicator_hint(page),
+    )
+    if pair is not None:
+        chart_answer, chart = pair
+        messages.append({
+            "role": "assistant",
+            "content": chart_answer.answer,
+            "references": tuple(chart_answer.references),
+            "numeric": False,
+            "chart": chart,
+        })
+        st.session_state["ask_input"] = ""
+        return
     try:
         answer = answer_question(
             question,
@@ -2060,11 +2132,29 @@ def _ask_process(
         })
         st.session_state["ask_input"] = ""
         return
-    # Optional Groq wording layer. It stays off unless the deployment sets
-    # GROQ_API_KEY. It receives only an already-grounded answer whose figures
-    # have been replaced with local tokens, and any provider failure or changed
-    # figure returns the deterministic text unchanged.
+    # Optional Groq layers. Both stay off unless the deployment sets
+    # GROQ_API_KEY. The wording layer receives only an already-grounded answer
+    # whose figures have been replaced with local tokens, and any provider
+    # failure or changed figure returns the deterministic text unchanged.
+    # The general-knowledge layer runs only when the offline core has no
+    # verified evidence: the typed question alone may then be sent (no survey
+    # figure, record or identifier), the answer is labelled as model knowledge,
+    # and any provider failure falls back to the deterministic answer.
     provider = _ask_provider()
+    if answer.question_kind == "fallback" and provider is not None:
+        general_text, general_status = answer_general_with_status(question, provider)
+        messages.append({
+            "role": "assistant",
+            "content": general_text or answer.answer,
+            "references": () if general_text else tuple(answer.references),
+            "numeric": False,
+            "ai_status": general_status,
+            "ai_model": getattr(provider, "model", ""),
+            "general": bool(general_text),
+            "general_attempt": True,
+        })
+        st.session_state["ask_input"] = ""
+        return
     refinement = refine_answer_with_status(question, answer, provider)
     messages.append({
         "role": "assistant",
@@ -2105,6 +2195,18 @@ def _ask_render_message(message: dict[str, object]) -> None:
         body = html.escape(str(message.get("content", ""))) if role == "user" else ask_bullets(str(message.get("content", "")))
         st.markdown(f"<div class='ask-q'>{body}</div>" if role == "user" else body, unsafe_allow_html=role == "user")
         if role != "user":
+            chart = message.get("chart")
+            if isinstance(chart, AssistantChart):
+                st.plotly_chart(_ask_chart_figure(chart), key=f"ask_chart_{abs(hash(message.get('content', '')))}", use_container_width=True, config={"displayModeBar": False})
+                counts = pd.DataFrame(
+                    chart.counts, columns=[chart.group_label.capitalize(), "Weighted share", "Respondents (valid n)"]
+                )
+                counts["Weighted share"] = [f"{share * 100:.1f}%" for _group_name, share in chart.rows]
+                with st.expander("Numbers behind this chart", expanded=False):
+                    st.dataframe(counts, hide_index=True, use_container_width=True)
+                st.caption("Verified: weighted with the survey's household weight on the active "
+                           "source and lens, exactly like every dashboard figure. Bars sorted "
+                           "highest to lowest share.")
             references = message.get("references") or ()
             if references:
                 # One compact provenance line instead of a citation wall: the
@@ -2116,16 +2218,26 @@ def _ask_render_message(message: dict[str, object]) -> None:
                         label = label[:67].rstrip() + "…"
                     parts.append(f"{reference.identifier} · {label}")
                 st.caption("Sources: " + " — ".join(parts))
-            status = str(message.get("ai_status") or "disabled")
-            if status == "reworded":
-                redacted = int(message.get("redacted_figures") or 0)
+            status = message.get("ai_status")
+            if message.get("general") is True:
                 st.markdown(
-                    "<div class='ask-state'>AI-generated wording from verified project evidence "
-                    f"({redacted} figure placeholder(s) restored locally; no survey figure was "
-                    "sent). Check important details against the sources.</div>",
+                    "<div class='ask-state'>General AI answer — general AI knowledge, "
+                    "<strong>not</strong> from this survey's verified data. Survey figures "
+                    "belong to the dashboard pages; check anything else before relying on it.</div>",
                     unsafe_allow_html=True,
                 )
-            elif status in ASK_AI_STATUS:
+            elif isinstance(status, str) and message.get("general_attempt") is True and status in ASK_GENERAL_STATUS:
+                st.markdown(
+                    f"<div class='ask-state'>{html.escape(ASK_GENERAL_STATUS[status])}</div>",
+                    unsafe_allow_html=True,
+                )
+            elif isinstance(status, str) and status == "reworded":
+                st.markdown(
+                    "<div class='ask-state'>AI-polished wording of the verified project answer — "
+                    "no survey figures were sent. Check important details against the sources.</div>",
+                    unsafe_allow_html=True,
+                )
+            elif isinstance(status, str) and status in ASK_AI_STATUS:
                 st.markdown(
                     f"<div class='ask-state'>{html.escape(ASK_AI_STATUS[status])}</div>",
                     unsafe_allow_html=True,
@@ -2153,7 +2265,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             key="ask_launch",
             icon=":material/forum:",
             help="Open the InsightRwanda AI Assistant. Answers use verified project "
-                 "evidence; an optional Groq wording layer runs only when configured.",
+                 "evidence; AI-polished wording runs only when enabled for the deployment.",
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
@@ -2161,15 +2273,14 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
 
     provider = _ask_provider()
     badge = (
-        f"Verified project rules · Groq not configured · answers stay local"
+        f"Verified project evidence · answers stay local"
         if provider is None else
-        f"Groq {getattr(provider, 'model', GROQ_DEFAULT_MODEL)} · figures are replaced "
-        "with local tokens before sending · AI wording may need verification"
+        f"Verified project evidence · AI wording layer active"
     )
 
     with st.container(key="ask_panel"):
         st.markdown(
-            "<div class='ask-head'><span class='ask-mark' aria-hidden='true'>◒</span>"
+            "<div class='ask-head'><img class='ask-mark' src='" + logo_data_uri() + "' alt='InsightRwanda logo'>"
             "<div><div class='ask-title'>InsightRwanda AI Assistant</div>"
             f"<div class='ask-subtitle'>{ASK_SUMMARY}</div></div></div>",
             unsafe_allow_html=True,
@@ -2188,8 +2299,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
         if provider is None:
             st.caption(
-                "Groq is not configured here. Answers still use the verified project rules. "
-                "An administrator can set GROQ_API_KEY in Streamlit secrets or the environment."
+                "AI-polished wording is not enabled for this panel. Answers still use the "
+                "verified project evidence."
             )
 
         pending = st.session_state.pop("ask_pending", None)
@@ -2205,32 +2316,28 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             else:
                 st.markdown(
                     "<div class='ask-empty'><div class='ask-empty-title'>Ask about verified "
-                    "insights</div><div class='ask-empty-copy'>Answers come from this project's "
-                    "approved definitions and loaded survey records — never from outside "
-                    "knowledge. Survey figures are replaced with local tokens before any AI "
-                    "wording request. Start with one of these:</div></div>",
+                    "insights</div><div class='ask-empty-copy'>Answers about the evidence come "
+                    "from this project's approved definitions and loaded survey records. When a "
+                    "question has no verified answer, it may be answered from general knowledge "
+                    "and is labelled as such.</div></div>",
                     unsafe_allow_html=True,
                 )
-                for index, suggestion in enumerate(ASK_SUGGESTIONS):
-                    st.button(
-                        suggestion,
-                        key=f"ask_example_{index}",
-                        width="stretch",
-                        on_click=_ask_queue,
-                        args=(suggestion,),
-                    )
 
         hint = st.session_state.get("ask_hint")
         if hint:
             st.caption(f"ℹ️ {hint}")
         st.session_state.pop("ask_hint", None)
 
+        # st.text_input commits its value exactly when Enter is pressed (or on
+        # blur), so on_change submits the question on Enter. There is no
+        # on_submit parameter on text_input — that exists only on chat_input.
         st.text_input(
             "Your question",
             key="ask_input",
             placeholder="Ask a question about the available insights...",
             max_chars=MAX_QUESTION_LENGTH,
             label_visibility="collapsed",
+            on_change=_ask_queue,
         )
         controls = st.columns([1.4, 1])
         with controls[0]:
@@ -2251,10 +2358,8 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 on_click=_ask_clear,
             )
         st.markdown(
-            "<div class='ask-foot'>Do not enter personal or household-level details. Only your "
-            "question and approved project wording are sent when Groq is configured; survey "
-            "figures are replaced locally before sending. AI wording may contain errors and is "
-            "not an official NISR conclusion.</div>",
+            "<div class='ask-foot'>Do not enter personal or household-level details in your "
+            "questions.</div>",
             unsafe_allow_html=True,
         )
 

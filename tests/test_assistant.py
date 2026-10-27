@@ -18,6 +18,9 @@ from research.assistant import (
     MAX_QUESTION_LENGTH,
     AssistantAnswer,
     answer_question,
+    answer_with_chart,
+    chart_for_indicator,
+    chart_request,
     resolve_indicator,
 )
 from research.catalog import SourceProfile, aggregate_release_allowed, build_source_profile
@@ -65,6 +68,7 @@ def _fixture_frame() -> pd.DataFrame:
         "saves_regularly": [0.0, 1.0, 1.0, 0.0, 1.0, 1.0],
         "social_safety_net": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
         "province": ["Kigali", "South", "Kigali", "West", "South", "Kigali"],
+        "setting": ["Urban", "Rural", "Urban", "Urban", "Rural", "Urban"],
     })
 
 
@@ -384,6 +388,66 @@ class ExampleQuestionTests(AssistantUnitTestBase):
                 answer = self.ask(question)
                 self.assertEqual(answer.question_kind, kind)
                 self.assertFalse(answer.grounded)
+
+
+class ChartRequestTests(AssistantUnitTestBase):
+    """Verified group breakdowns: detection, honesty and hand-computable numbers."""
+
+    def test_chart_detection_and_resolution(self) -> None:
+        self.assertEqual(chart_request("Show me a graph of mobile money by province"), ("FI-02", "province"))
+        self.assertEqual(chart_request("Show FI-02 as a bar chart by district"), ("FI-02", "district"))
+        self.assertEqual(chart_request("Compare internet access urban and rural"), ("FI-06", "setting"))
+        # No chart words and no by-group phrasing: not a chart request.
+        self.assertIsNone(chart_request("What does FI-02 mean in simple English?"))
+        # Chart word but no resolvable indicator: leaves the normal flow.
+        self.assertIsNone(chart_request("Show me a graph of the poverty rate"))
+
+    def test_province_breakdown_matches_hand_computed_shares(self) -> None:
+        # e9c codes: 1/2 = difficult (Yes), 3 = not difficult, 99/missing excluded.
+        # Kigali (1 Yes w1, 1 No w1) → 0.5; South (2 Yes) → 1.0; West (1 Yes) → 1.0.
+        pair = answer_with_chart(
+            "Show FI-04 by province as a bar chart",
+            frame=self.frame,
+            profile=self.profile,
+            source_label=MASTER_LABEL,
+            lens_note="National · All households",
+        )
+        self.assertIsNotNone(pair)
+        answer, chart = pair
+        self.assertEqual(answer.question_kind, "chart")
+        self.assertTrue(answer.grounded)
+        self.assertEqual([name for name, _share in chart.rows], ["South", "West", "Kigali"])
+        self.assertAlmostEqual(chart.rows[0][1], 1.0)
+        self.assertAlmostEqual(chart.rows[1][1], 1.0)
+        self.assertAlmostEqual(chart.rows[2][1], 0.5)
+        self.assertEqual(chart.counts, (("South", 2, 2), ("West", 1, 1), ("Kigali", 1, 2)))
+        self.assertEqual(answer.references[0].identifier, "FI-04")
+        # The text itself carries no figures: the numbers live on the chart.
+        self.assertNotIn("%", answer.answer)
+
+    def test_setting_breakdown_and_answer_text(self) -> None:
+        # Urban: 2 Yes of 3 valid respondents (2/3); Rural: 2 Yes of 2 (100%).
+        chart = chart_for_indicator(self.frame, "FI-04", "setting")
+        self.assertEqual([name for name, _share in chart.rows], ["Rural", "Urban"])
+        self.assertAlmostEqual(chart.rows[1][1], 2 / 3)
+        self.assertIn("urban/rural setting", chart.title)
+
+    def test_missing_group_column_fails_honestly(self) -> None:
+        frame = self.frame.drop(columns=["province"])
+        pair = answer_with_chart(
+            "Show FI-03 by province",
+            frame=frame,
+            profile=self.profile,
+            source_label=MASTER_LABEL,
+        )
+        self.assertIsNotNone(pair)
+        answer, chart = pair
+        self.assertIsNone(chart)
+        self.assertEqual(answer.question_kind, "chart_unavailable")
+        self.assertIn("not reproducible", answer.answer)
+
+    def test_privacy_and_injection_questions_never_reach_the_chart_path(self) -> None:
+        self.assertIsNone(chart_request("List household keys by province"))
 
 
 class MasterIntegrationTests(unittest.TestCase):

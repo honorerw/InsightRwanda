@@ -27,14 +27,16 @@ import pandas as pd
 from research.briefs import HONESTY_STATEMENT, PAGES, build_page_brief
 from research.catalog import SourceProfile, aggregate_release_allowed
 from research.estimation import CONTEXT_ESTIMATES, calculate_context_estimate, official_poverty_status
-from research.indicators import INDICATORS, calculate_indicator
+from research.indicators import INDICATORS, calculate_indicator, calculate_by_group
 from research.quality import QualityCheck, quality_summary
 
 __all__ = [
     "AssistantAnswer",
+    "AssistantChart",
     "EvidenceReference",
     "MAX_QUESTION_LENGTH",
     "answer_question",
+    "answer_with_chart",
     "resolve_indicator",
 ]
 
@@ -132,6 +134,188 @@ _PRIVACY_PATTERNS = (
 
 def _normalize(question: str) -> str:
     return re.sub(r"\s+", " ", " ".join(str(question).split())).strip()
+
+
+# --- Verified inline charts --------------------------------------------------
+# Charts are built from the same tested calculation functions as every
+# dashboard figure (weighted_mean / calculate_by_group). A chart is an
+# honest re-presentation of verified numbers, never a new analysis.
+
+_GROUP_COLUMNS: dict[str, str] = {
+    "province": "province",
+    "district": "district",
+    "urban": "setting",
+    "rural": "setting",
+}
+_GROUP_LABELS: dict[str, str] = {
+    "province": "province",
+    "district": "district",
+    "setting": "urban/rural setting",
+}
+
+
+@dataclass(frozen=True)
+class AssistantChart:
+    """One verified group breakdown, rendered as a bar chart by the app."""
+
+    indicator_id: str
+    title: str
+    group_label: str
+    note: str
+    rows: tuple[tuple[str, float], ...]  # (group label, weighted share 0..1)
+    counts: tuple[tuple[str, int, int], ...]  # (group, numerator n, valid n)
+
+
+def chart_request(question: str, indicator_hint: str = "") -> tuple[str, str] | None:
+    """Detect a chart/breakdown request and resolve it to (indicator id, group).
+
+    Returns ``None`` unless the question explicitly asks for a chart/graph/plot
+    (or "show … by province/urban/rural"), resolves to an FI indicator, and the
+    requested group column name is one the core can compute. Restricted
+    requests never reach decision logic here: the caller still runs the full
+    answer path, which refuses them.
+    """
+
+    text = _normalize(question).lower()
+    chart_words = re.search(
+        r"\b(charts?|graphs?|plots?|visual(s|ise|ize|ased|ized)?|bar chart|breakdown|comparison|compare)\b",
+        text,
+    )
+    by_group = re.search(r"\bby\b", text) is not None and re.search(
+        r"\b(province|district|urban|rural)\b", text
+    )
+    if chart_words is None and not by_group:
+        return None
+    indicator_id = resolve_indicator(question, indicator_hint)
+    if indicator_id is None or indicator_id not in INDICATORS:
+        return None
+    match = re.search(r"\bby\s+(province|district|urban|urban and rural|urban/rural|rural)\b", text)
+    group_word = match.group(1) if match else None
+    if group_word is None:
+        mixed = re.search(r"\b(urban and rural|urban/rural)\b", text)
+        if mixed:
+            group_word = "urban"
+        else:
+            for word in _GROUP_COLUMNS:
+                if re.search(rf"\b{word}\b", text):
+                    group_word = word
+                    break
+    if group_word is None:
+        # A chart without a named group defaults to the province breakdown.
+        group_word = "province"
+    column = _GROUP_COLUMNS.get(group_word)
+    if column is None:
+        return None
+    return indicator_id, column
+
+
+def chart_for_indicator(
+    frame: pd.DataFrame | None,
+    indicator_id: str,
+    group_column: str,
+) -> AssistantChart | None:
+    """Compute a verified group breakdown, or ``None`` when not reproducible."""
+
+    if frame is None:
+        return None
+    definition = INDICATORS[indicator_id]
+    try:
+        table = calculate_by_group(frame, indicator_id, group_column)
+    except (KeyError, ValueError):
+        return None
+    chart_rows: list[tuple[str, float]] = []
+    chart_counts: list[tuple[str, int, int]] = []
+    table = table[table["denominator_n"].gt(0) & table["estimate"].notna()]
+    for row in table.itertuples(index=False):
+        name = "Unknown" if row.group is None or (isinstance(row.group, float) and pd.isna(row.group)) else str(row.group)
+        chart_rows.append((name, float(row.estimate)))
+        chart_counts.append((name, int(row.numerator_n), int(row.denominator_n)))
+    if not chart_rows:
+        return None
+    chart_rows.sort(key=lambda item: item[1], reverse=True)
+    order = {name: index for index, (name, _share) in enumerate(chart_rows)}
+    chart_counts.sort(key=lambda item: order.get(item[0], 999))
+    limitation = definition.limitations[0] if definition.limitations else ""
+    return AssistantChart(
+        indicator_id=indicator_id,
+        title=f"{indicator_id} · {definition.title} by {_GROUP_LABELS[group_column]}",
+        group_label=_GROUP_LABELS[group_column],
+        note=limitation,
+        rows=tuple(chart_rows),
+        counts=tuple(chart_counts),
+    )
+
+
+def answer_with_chart(
+    question: str,
+    *,
+    frame: pd.DataFrame | None = None,
+    profile: SourceProfile | None = None,
+    source_label: str = "",
+    lens_note: str = "",
+    indicator_hint: str = "",
+) -> tuple[AssistantAnswer, AssistantChart | None] | None:
+    """Build the verified text answer plus chart data for a chart request.
+
+    Returns ``None`` when the question is not a chart request (the caller then
+    uses ``answer_question`` unchanged — refusals, fallbacks and general mode
+    all stay on their normal paths). The text itself carries no figures: the
+    numbers live in the chart and its table, computed live from the active
+    records with the same tested household-weight functions the dashboard uses.
+    """
+
+    request = chart_request(question, indicator_hint)
+    if request is None:
+        return None
+    indicator_id, group_column = request
+    definition = INDICATORS[indicator_id]
+    chart = chart_for_indicator(frame, indicator_id, group_column)
+    if chart is None:
+        parts = [
+            f"I can draw a bar chart of a verified financial-inclusion indicator "
+            f"(FI-01…FI-06) by province, district, or urban/rural setting.",
+            f"This one is not reproducible on the active survey source, so no chart is "
+            f"shown: {indicator_id} needs columns that have no label-verified "
+            f"counterpart there. It is withheld rather than approximated.",
+        ]
+        references = (
+            EvidenceReference(definition.indicator_id, definition.title, definition.unit),
+            _page_reference("Financial inclusion"),
+            _page_reference("Methods & sources"),
+        )
+        return AssistantAnswer(
+            question_kind="chart_unavailable",
+            answer="\n".join(parts),
+            references=references,
+            grounded=False,
+            scope="project evidence",
+        ), None
+    parts = [
+        f"{chart.title} — weighted share of valid respondents in each {chart.group_label}.",
+        f"{_lens_prefix(lens_note)}The bars come from the same tested household-weight "
+        f"calculation the dashboard uses; the numbers sit on the bars and in the table "
+        f"beneath the chart.",
+    ]
+    references = [
+        EvidenceReference(definition.indicator_id, definition.title, definition.unit),
+        _page_reference("Financial inclusion"),
+    ]
+    dataset = _dataset_reference(profile, source_label)
+    if dataset is not None:
+        references.append(dataset)
+        parts.append(f"Source: {_dataset_line(profile, source_label)}.")
+    if chart.note:
+        parts.append(f"Keep in mind: {chart.note}")
+        references.append(EvidenceReference(f"{indicator_id} limitation", chart.note))
+    return AssistantAnswer(
+        question_kind="chart",
+        answer="\n".join(parts),
+        references=tuple(references),
+        grounded=True,
+        numeric_verified=False,
+        scope="project evidence",
+        applied_lens=lens_note,
+    ), chart
 
 
 def resolve_indicator(question: str, hint: str = "") -> str | None:
