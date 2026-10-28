@@ -1,3 +1,9 @@
+[client]
+# Keep Streamlit developer actions out of the viewer-facing app chrome.
+# Community Cloud's signed-in owner-only "Manage app" control is separate
+# hosting UI and is not controlled by this setting.
+toolbarMode = "viewer"
+
 [theme]
 base = "light"
 primaryColor = "#3155d4"
