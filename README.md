@@ -55,9 +55,9 @@ context estimates, the official-poverty unlock contract and the ten one-page
 briefs (content, weighting arithmetic, deterministic rendering, PDF/PNG validity
 and identifier exclusion).
 
-## Ask InsightRwanda AI Assistant
+## Ask InsightRwanda Evidence Assistant
 
-The floating **AI Assistant** button at the bottom-right of every page opens an
+The floating **Evidence Assistant** button at the bottom-right of every page opens an
 in-screen chat panel — no external website, no page reload. The panel keeps its
 conversation in Streamlit session state, shows a loading
 indicator, a **New conversation** action, and a **Close** button.
@@ -77,84 +77,10 @@ The assistant is **evidence-first**:
 - It refuses household-level or personal requests and says plainly when
   information is unavailable or unverified; it never invents statistics,
   sources, intervals, geographic findings or research conclusions.
-- The optional Groq layer (`research/assistant_llm.py`) has two strictly
-  separated jobs:
-
-  **General knowledge, with live web search.** When the offline core has no
-  verified evidence for a question and Groq is configured, the question alone
-  (no survey figure, record or project metadata — the same email/key/identifier
-  block applies) is sent as a general-knowledge request. Groq's server-side
-  **browser search** is enabled, so answers can use live web sources — current
-  events, finance, technology — and the model is instructed to name its
-  sources and to never state or compute statistics about the survey data. The
-  answer is always labelled **“General AI answer — drawn from general
-  knowledge with a live web search when needed, not from this survey's
-  verified data”**. With no key configured, such questions get the honest
-  local fallback; if the search-enabled request fails, one tool-free attempt
-  (model knowledge alone) is made before the error is shown.
-
-  **Wording only.** For evidence answers, Groq can **only reword** an
-  already-verified answer. It never chooses statistics, adds citations or
-  changes a publication/authorisation gate. Every figure in both the question
-  and the answer is replaced locally with a placeholder (`⟦Q1⟧` for the
-  question, `⟦V1⟧`, `⟦V2⟧`, … for the answer) before transmission, and
-  restored only if the returned wording preserves every figure and adds none.
-  Questions containing an email address, key-like token or explicit identifier
-  phrase are blocked.
-- On a missing key, quota/rate limit, invalid key, timeout, network failure,
-  a changed figure or a failed general-knowledge send, the deterministic
-  answer is shown unchanged, with a plain status explaining why. There are no
-  automatic retries and no paid fallback provider.
-
-### Enable Groq locally
-
-1. Create an API key in the [Groq console](https://console.groq.com/keys).
-2. Copy the tracked example and fill in your key:
-
-   ```bash
-   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
-   ```
-
-   `.streamlit/secrets.toml` is git-ignored. Alternatively export the key:
-
-   ```bash
-   export GROQ_API_KEY="your-key"
-   ```
-
-3. Optionally set `GROQ_MODEL` (Streamlit secret or environment variable). The
-   default is `openai/gpt-oss-120b`, a current production model on Groq.
-4. Restart `streamlit run app.py`. The panel shows the active Groq model when a
-   key is configured; otherwise it states that answers stay local.
-
-### Configure the key on Render
-
-In the Render dashboard open the service → **Environment** → add
-`GROQ_API_KEY` as a secret environment variable (and optionally `GROQ_MODEL`),
-then save and redeploy. Do not add the key to `render.yaml`, a committed `.env`
-file or any source file. The app never logs or displays the key, and all
-provider failures are reduced to safe status messages.
-
-### Free tier and quotas
-
-Groq currently offers a rate-limited free tier for developer accounts, but free
-usage is **limited and not guaranteed**, and limits differ by model. Check the
-**Limits** page in the Groq console for the exact allowance on your account;
-do not assume unlimited requests. The app sets `max_completion_tokens=1200`, a
-20-second request timeout, a 600-character question limit, a 40-message history
-cap and a 12,000-character payload cap. It disables the SDK's automatic retries
-so a failed request cannot silently consume the quota again, and it reports an
-exhausted quota instead of promising unlimited free usage. No billing is
-configured by the app.
-
-Groq's data policy states that inference inputs and outputs are not retained by
-default, though they may be logged for up to 30 days for reliability and abuse
-monitoring unless the organisation enables Zero Data Retention. For evidence
-answers only non-sensitive, already-displayed documentation is sent, with every
-survey figure redacted; for general-knowledge answers only the user's typed
-question is sent. Raw records, identifiers, file paths, source inventory and
-unpublished/restricted outputs are never transmitted. If that external sharing
-is not acceptable for your deployment, leave `GROQ_API_KEY` unset — the
-assistant continues to work entirely locally.
+The assistant is fully local. It uses only the deterministic rules in
+`research/assistant.py` and the currently loaded survey data; unsupported
+questions are marked unavailable. No API key, external model, network request
+or third-party service is used.
 
 ## Reproducibility record
 

@@ -2,7 +2,7 @@
 
 **Project:** InsightRwanda · Financial Inclusion & Poverty Research Analytics
 **Context:** NISR 2026 Big Data Hackathon — Track 2 (Financial Inclusion & Poverty Reduction in Rwanda)
-**Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18, groq ≥1.7 (optional AI wording)
+**Stack:** Python 3.14, Streamlit ≥1.40, pandas ≥2.1, NumPy ≥1.26, Plotly ≥5.18
 **Current state at documentation time:** 170/170 tests pass; dashboard runs locally. Includes the estimation layer (interval estimates, income-band context estimates, official-poverty contract), the per-page briefs layer (one-page PDF/PNG renders), the real predictive-modeling layer (`research/modeling.py`) and the dedicated **Predictive insights** page. Recent repairs: `load_analysis_data` now catches `struct.error` (see §7), the About page is wired into navigation, and the pandas 4.0 `select_dtypes` deprecation warning is fixed.
 
 > Verified at a recent audit: SHA-256 `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae` · analysis version `financial_inclusion_135869b472e3`
@@ -333,21 +333,15 @@ Pooled cross-source analysis (added 2026-10-25). The two supplied files share **
 | `build_combined_dataset(master, spss)` | Returns the single stacked, harmonized dataset (20 columns) with a deterministic hashed `record_id` instead of the supplied keys. Backs `scripts/build_combined_dataset.py`, which writes `data/derived/insightrwanda_combined.csv` + `.metadata.json` (source hashes, row counts, linkage audit, column notes). `data/derived/` is git-ignored: the rows are respondent-level records and are never published by the app. |
 | `wave_note()` / `comparison_note()` | The exact caveats the UI repeats: one dated file only, and a source gap is not a time trend or a causal effect. |
 
-### 4.9 `research/assistant.py` and `research/assistant_llm.py`
+### 4.9 `research/assistant.py`
 
 `assistant.py` is the deterministic answer engine behind **Ask InsightRwanda**. It resolves ordinary-language questions to the six verified FI indicators, simple-English definitions, calculation rules, documented limitations, data-quality checks, source references and page navigation, and returns an `AssistantAnswer` carrying the question kind, evidence references and a `grounded` flag. Numeric answers are calculated from the active lens with `hh_wt`; refusals, fallbacks and unsupported questions never carry invented evidence. User input is length-limited, treated as data (never as instructions), and household-level requests are refused.
 
-`assistant_llm.py` is the **optional** Groq wording layer. It is disabled unless `GROQ_API_KEY` is configured, and its contract is deliberately closed:
-
-| Guard | Rule |
-|---|---|
-| Eligible answers | Only grounded documentation kinds (`explain_indicator`, `indicator_catalog`, `indicator_methods`, `limitations`, `identity`). Source inventory, publication status, quality findings, page narratives, refusals and fallbacks are never sent. |
-| Redaction | Every survey figure in the question and answer is replaced locally with `⟦Qn⟧` / `⟦Vn⟧`; indicator IDs and `Page NN` citations stay readable. Questions containing an email, key-like token or explicit identifier phrase are blocked. No DataFrame, record, identifier, path or exception text is ever included. |
-| Restoration | The wording is accepted only when every placeholder appears exactly once and no new digits were introduced; otherwise the deterministic answer is returned unchanged (`guard_rejected`). |
-| Transport | `groq` (official SDK), `openai/gpt-oss-120b` by default, 20-second timeout, `max_completion_tokens=1200`, `temperature=0.2`, short hidden reasoning on GPT-OSS models, SDK retries disabled (`max_retries=0`). |
-| Failures | Missing key `disabled`; ineligible payload `blocked`; quota `rate_limited`; bad key `invalid_key`; timeout `timeout`; empty response `invalid_response`; any other failure `unavailable`. No paid fallback provider. |
-
-**General-knowledge mode (`answer_general_with_status` / `GroqProvider.general`).** In addition to wording, the layer can answer questions the offline core has no verified evidence for (`question_kind="fallback"`). Only the user's typed question is then sent — never a survey figure, record, identifier or project metadata — with a fixed `GENERAL_GUIDANCE` prompt that frames the model as a general-knowledge assistant, encourages live web answers with named sources for time-sensitive questions, forbids it to state, guess or compute any statistic about InsightRwanda's survey data, refuses personal/household-level requests, and treats the question as text rather than instructions. For gpt-oss models Groq's server-side **browser search** (`tools=[{"type": "browser_search"}]`, `tool_choice="auto"`) is enabled: the search sees the question text only and answers may cite live web pages; retrieval citation markers (【n†…】) are stripped before display. If the search-enabled request fails, one tool-free request (model knowledge alone) is attempted before the error is translated. The same identifier block, 600-character question cap, 20-second timeout and error translation apply. Successes carry status `general` and are labelled in the UI as *“General AI answer — drawn from general knowledge with a live web search when needed, not from this survey's verified data”*; a privacy/length-blocked question is `refused` and never leaves the app; provider failures fall back to the deterministic answer with a plain status. Broad keywords such as “quality”, “evidence” or “calculated” only route to a project answer when the question also references this project, survey or an indicator; otherwise it falls through to this general mode, so an ordinary question is not mistaken for a dashboard question. |
+The assistant is fully local. It resolves questions against approved definitions,
+verified calculations, source references and the active survey lens. It refuses
+household-level requests, never invents unsupported statistics, and marks
+fallback questions as unavailable. No external model, API key or network request
+is involved.
 
 ---
 
@@ -387,9 +381,9 @@ The sidebar nav is rebuilt as a labelled system: grouped numbered entries — **
 | `lens_signature` / `lens_toast` | Describes the active lens and raises a quiet `st.toast` when it changes (added 2026-10-20). |
 | `kpi_countup()` | Animate numeric `.metric-value` text from 0 to its value on scroll (silent fallback, `prefers-reduced-motion` respected; added 2026-10-20). |
 
-### Ask InsightRwanda AI Assistant (panel)
+### Ask InsightRwanda Evidence Assistant (panel)
 
-A floating **AI Assistant** launcher (`key="ask_launcher"`) appears at the
+A floating **Evidence Assistant** launcher (`key="ask_launcher"`) appears at the
 bottom-right of every page and opens an in-screen panel (`key="ask_panel"`) —
 no redirect and no page reload. The panel is a `@st.fragment`, so opening,
 closing and chatting rerender only the widget. It shows a welcome message, the
@@ -402,18 +396,10 @@ at 40 messages); when the page/lens changes the panel inserts an explicit
 context-change marker instead of mixing numbers from different views. A queued
 question is processed once, preventing duplicate submissions.
 
-Groq is optional. `_ask_provider()` reads `GROQ_API_KEY` from
-`st.secrets` first and the environment second (model: `GROQ_MODEL`, default
-`openai/gpt-oss-120b`, which ships Groq's server-side browser search for the
-general-knowledge path), creates at most one client per session, and returns
-`None` on missing/malformed configuration. `_ask_process` routes a fallback
-question to `answer_general_with_status` when a provider exists and appends a
-labelled general answer (`general: True`); when the general send fails, the
-deterministic fallback is shown with a dedicated status caption
-(`ASK_GENERAL_STATUS`). The UI labels AI-reworded answers as
-AI-generated, names the model, reports how many figures were restored locally,
-and gives a safe status message for every provider failure. With no key, the
-panel says answers stay local and the deterministic answer is used unchanged.
+The panel is fully local. `_ask_process` calls the deterministic answer engine
+and appends its verified text, references and charts directly; unsupported
+questions remain clearly marked as unavailable. No external model, API key or
+network request is used.
 
 ### Modals and motion (added 2026-10-20)
 
@@ -481,35 +467,9 @@ Real-source test suite:
 python -m unittest discover -s tests -v
 ```
 
-### Groq configuration (optional)
-
-The assistant works with no key. To enable the wording layer:
-
-1. Create a key in the [Groq console](https://console.groq.com/keys).
-2. Locally, copy `.streamlit/secrets.toml.example` to
-   `.streamlit/secrets.toml` and replace the placeholder, **or** export
-   `GROQ_API_KEY`. The real `secrets.toml` is git-ignored. `GROQ_MODEL` may
-   override the default `openai/gpt-oss-120b`.
-3. On Render, add `GROQ_API_KEY` (and optionally `GROQ_MODEL`) under the
-   service's **Environment** settings and redeploy. Never commit the key or put
-   it in `render.yaml`.
-
-Groq's free tier is rate-limited and limits vary by model; check the **Limits**
-page in the console rather than assuming a fixed allowance. The app does not
-promise unlimited free usage; it disables SDK retries, caps
-output/payload/history sizes, and shows a clear message when quota is exhausted.
-Groq's data policy states that inference inputs and outputs are not retained by
-default, though they may be logged for up to 30 days for reliability and abuse
-monitoring unless Zero Data Retention is enabled. For evidence answers only
-figure-redacted, already-displayed project documentation is transmitted; for
-general-knowledge answers only the user's typed question is sent. Never
-transmitted: raw survey records, identifiers, source inventory, quality
-findings or unpublished outputs. Deployments that cannot accept that sharing
-should leave the key unset.
-
 ### Test suite status (current, 2026-10-26)
 
-The assistant suites add deterministic routing/privacy tests, a stubbed Groq adapter suite and AppTest UI tests. Current total: **170/170 pass**. Earlier counts below are historical records.
+The assistant suites add deterministic routing/privacy tests and AppTest UI tests. Earlier counts below are historical records.
 
 26 tests total (13 original + 13 estimation tests). Executed again after the estimation layer was added:
 
@@ -520,7 +480,7 @@ The assistant suites add deterministic routing/privacy tests, a stubbed Groq ada
 - **Side effect of the fix:** the `analysis_version` fingerprint naturally changed to `financial_inclusion_f43dfd9a140b` (its design behaviour: it re-fingerprints whenever research logic changes). The README's audit record was synced accordingly; the previous audit value was `financial_inclusion_135869b472e3`.
 - Additional polish applied in the same pass: `select_dtypes` updated to `include=["object", "str"]` to silence the pandas 4.0 `Pandas4Warning`, and "About the build" was wired into the sidebar navigation (previously dead code).
 
-> **Status:** fully green — 170/170 tests pass (original suite + estimation + briefs + real predictive-modeling suite + page-surface artifacts + pooled joint-source suite + deterministic assistant, Groq adapter and AppTest UI suites). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080` (unchanged — the fingerprint covers data_pipeline, indicators, quality and estimation only).
+> **Status:** fully green — 170/170 tests pass (original suite + estimation + briefs + real predictive-modeling suite + page-surface artifacts + pooled joint-source suite + deterministic assistant and AppTest UI suites). Latest analysis-version fingerprint: `financial_inclusion_3d668fd37080` (unchanged — the fingerprint covers data_pipeline, indicators, quality and estimation only).
 
 ### Notable interpretation limit
 
@@ -539,16 +499,10 @@ The app distinguishes clearly between four different stages of data visibility:
 
 Concretely, `aggregate_release_allowed()` is the gate, and the Data Explorer is the only surface it controls today. Household-level records and raw CSV export are additionally suppressed by design until explicit authorization and an approved disclosure rule exist.
 
-The AI assistant sits inside the same boundary. It answers from verified project
-evidence only, refuses row-level requests, and the optional Groq path is
-restricted to five documentation answer kinds whose survey figures are replaced
-with local placeholders before transmission, plus a strictly separated
-general-knowledge mode that can send only the user's typed question (clearly
-labelled, never accepted as survey evidence). The model receives no filesystem,
-shell, database or raw-survey access, and cannot execute Python or SQL. If an
-answer kind's external-sharing permission is not established, the payload is
-blocked and the deterministic answer stays local. The model can never change an
-authorisation or publication gate.
+The Evidence Assistant stays inside the same boundary: it answers from verified
+project evidence, refuses row-level requests, and does not send any data to an
+external service. The deterministic engine cannot change an authorisation or
+publication gate.
 
 ### Reproducibility promise
 

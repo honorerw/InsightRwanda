@@ -1,46 +1,18 @@
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
-from unittest import mock
 
-import streamlit
 from streamlit.testing.v1 import AppTest
 
 APP_FILE = str(Path(__file__).resolve().parents[1] / "app.py")
 TIMEOUT_SECONDS = 180
 
 
-class _FakeUiProvider:
-    """Configuration-shaped stub: never looks up a key, never touches the network."""
-
-    model = "openai/gpt-oss-120b"
-
-
-class _ProviderStub:
-    """Configuration-shaped stub: never reads a key, never touches the network."""
-
-    model = "openai/gpt-oss-120b"
-
-
 class AssistantPanelUiTests(unittest.TestCase):
     """Drive the assistant the way a user does, on the same screen."""
 
     def setUp(self) -> None:
-        # Hermeticity: a developer machine may hold a real GROQ_API_KEY in
-        # .streamlit/secrets.toml or the environment, which AppTest would
-        # otherwise use for live network calls. Neutralize both sources for
-        # every test; the dedicated configuration test re-adds a fake key via
-        # the environment. (AppTest re-executes app.py each run, so patching
-        # the research.assistant_llm module — which the script imports fresh
-        # every run — is what per-test provider stubs must target.)
-        self._secrets_off = mock.patch.object(streamlit, "secrets", {})
-        self._secrets_off.start()
-        self.addCleanup(self._secrets_off.stop)
-        self._env_off = mock.patch.dict(os.environ, {"GROQ_API_KEY": ""})
-        self._env_off.start()
-        self.addCleanup(self._env_off.stop)
         self.at = AppTest.from_file(APP_FILE, default_timeout=TIMEOUT_SECONDS)
         self.at.run()
         self.assert_no_exception()
@@ -81,15 +53,15 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertEqual(len([b for b in self.at.button if b.key == "ask_close"]), 1)
         self.assertEqual(
             [element.placeholder for element in self.at.text_input],
-            ["Ask about the project — or anything else..."],
+            ["Ask about the project..."],
         )
 
         rendered = self.markdown_text()
         self.assertIn("InsightRwanda Assistant", rendered)
-        self.assertIn("Ask about Rwanda's financial inclusion and poverty insights — or any general question.", rendered)
+        self.assertIn("Ask about Rwanda's financial inclusion and poverty insights.", rendered)
         self.assertIn("answers stay local", rendered)
         self.assertIn("Ask anything", rendered)
-        self.assertIn("is labelled as such", rendered)
+        self.assertIn("Unsupported questions are clearly marked as unavailable", rendered)
         self.assertEqual(
             [button.key for button in self.at.button if button.key.startswith("ask_example_")],
             [],
@@ -152,41 +124,11 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
         # End-user language only: no developer setup words in the visible panel.
-        self.assertIn("General AI answers are not enabled", rendered)
+        self.assertIn("Questions are answered from the project's verified evidence only", rendered)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertNotIn("not an official NISR conclusion", rendered)
-        self.assertNotIn("replaced locally before sending", rendered)
-        for developer_word in ("GROQ_API_KEY", "administrator", "secrets or the environment"):
+        for developer_word in ("API key", "administrator", "secrets or the environment"):
             self.assertNotIn(developer_word, rendered)
-        # Only human-readable UI text is scanned: strip the global <style>
-        # block and all HTML tags/markup first, then no API-key-shaped value
-        # ('sk-' plus at least 8 key characters) may appear.
-        import re
-        text_only = re.sub(r"<style>.*?</style>", " ", rendered, flags=re.DOTALL)
-        text_only = re.sub(r"<[^>]*>", " ", text_only)
-        self.assertIsNone(re.search(r"sk-[A-Za-z0-9_\-]{8,}", text_only))
-
-    def test_configured_groq_is_labelled_without_exposing_the_key(self) -> None:
-        # A fake key exercises the configuration gate and client setup; no
-        # question is sent, so this test never contacts the provider. The real
-        # factory is restored for this test only (setUp keeps every other test
-        # offline, regardless of a developer machine's real secrets).
-        with mock.patch.dict(
-            os.environ, {"GROQ_API_KEY": "gsk_FAKE-test-placeholder"}, clear=False
-        ):
-            at = AppTest.from_file(APP_FILE, default_timeout=TIMEOUT_SECONDS)
-            at.run()
-            self.assertFalse(list(at.exception))
-            at.button(key="ask_launch").click()
-            at.run()
-            self.assertFalse(list(at.exception))
-            rendered = " ".join(e.value for e in at.markdown)
-            rendered += " " + " ".join(e.value for e in at.caption)
-        self.assertIn("general AI answers active", rendered)
-        self.assertNotIn("gsk_FAKE-test-placeholder", rendered)
-        self.assertNotIn("openai/gpt-oss-120b", rendered)
-        self.assertNotIn("local tokens", rendered)
-        self.assertTrue(at.session_state["ask_provider"] is not None)
 
     def test_typed_question_and_unavailable_evidence(self) -> None:
         self.open_panel()
@@ -238,12 +180,10 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertEqual(chart.group_label, "province")
         self.assertTrue(chart.rows)
         self.assertEqual(len(chart.rows), len(chart.counts))
-        # Chart messages deliberately skip the AI wording layer.
-        self.assertIsNone(last.get("ai_status"))
         # The bubble (chart figure, numbers table, captions) renders cleanly.
         self.assert_no_exception()
 
-    def test_fallback_questions_without_a_provider_stay_entirely_local(self) -> None:
+    def test_fallback_questions_stay_entirely_local(self) -> None:
         self.open_panel()
         self.send("What will inflation be next year?")
 
@@ -252,66 +192,7 @@ class AssistantPanelUiTests(unittest.TestCase):
         last = messages[-1]
         self.assertNotIn("general", last)
         self.assertNotIn("general_attempt", last)
-        self.assertEqual(last.get("ai_status"), "disabled")
-        self.assertNotIn("General AI answer", self.markdown_text())
-
-    def test_fallback_question_is_routed_to_a_labelled_general_answer(self) -> None:
-        # The deterministic core has no verified evidence for this question, so
-        # with a provider it may be answered from labelled general knowledge.
-        # The provider itself is stubbed: no network, no key needed.
-        with mock.patch.dict(
-            os.environ, {"GROQ_API_KEY": "gsk_FAKE-test-placeholder"}, clear=False
-        ), \
-                mock.patch(
-                    "research.assistant_llm.get_configured_provider", return_value=_ProviderStub()
-                ), \
-                mock.patch(
-                    "research.assistant_llm.answer_general_with_status",
-                    return_value=("Kigali is the capital of Rwanda.", "general"),
-                ):
-            self.open_panel()
-            self.send("What is the capital city of Rwanda?")
-
-        messages = self.at.session_state["ask_messages"]
-        last = messages[-1]
-        self.assertEqual(last["role"], "assistant")
-        self.assertEqual(last["content"], "Kigali is the capital of Rwanda.")
-        self.assertEqual(last["references"], ())
-        self.assertFalse(last["numeric"])
-        self.assertTrue(last["general"])
-        self.assertEqual(last["ai_status"], "general")
-
-        rendered = self.markdown_text()
-        self.assertIn("General AI answer", rendered)
-        self.assertIn("not</strong> from this survey's verified data", rendered)
-        self.assertNotIn("won't improvise", rendered)
-
-    def test_general_mode_provider_failure_falls_back_to_the_offline_answer(self) -> None:
-        with mock.patch.dict(
-            os.environ, {"GROQ_API_KEY": "gsk_FAKE-test-placeholder"}, clear=False
-        ), \
-                mock.patch(
-                    "research.assistant_llm.get_configured_provider", return_value=_ProviderStub()
-                ), \
-                mock.patch(
-                    "research.assistant_llm.answer_general_with_status",
-                    return_value=("", "timeout"),
-                ):
-            self.open_panel()
-            self.send("What is the capital city of Rwanda?")
-
-        messages = self.at.session_state["ask_messages"]
-        last = messages[-1]
-        self.assertIn("won't improvise", last["content"])
-        self.assertFalse(last.get("general"))
-        self.assertTrue(last.get("general_attempt"))
-        self.assertEqual(last.get("ai_status"), "timeout")
-
-        rendered = self.markdown_text() + " " + self.caption_text()
-        self.assertIn("did not respond in time", rendered)
-        self.assertIn("offline project answer is shown", rendered)
-        self.assertNotIn("General AI answer", rendered)
-
+        self.assertNotIn("ai_status", last)
 
 if __name__ == "__main__":
     unittest.main()
