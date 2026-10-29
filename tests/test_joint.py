@@ -20,6 +20,7 @@ from research.joint import (
     SOURCE_LABELS,
     TARGET_COMPONENTS,
     JointFrameError,
+    build_combined_analysis_frame,
     build_combined_dataset,
     build_joint_frame,
     comparison_note,
@@ -134,6 +135,13 @@ class JointFrameTests(unittest.TestCase):
     def test_documented_year_override_replaces_undocumented_wave(self):
         joint = build_joint_frame(self.master, self.spss, wave_years={"master": 2020})
         self.assertEqual(int(joint.loc[joint["source"].eq("master"), "wave_year"].iloc[0]), 2020)
+
+    def test_dashboard_combined_frame_preserves_source_specific_rows(self):
+        combined = build_combined_analysis_frame(self.master, self.spss)
+        self.assertEqual(len(combined), len(self.master) + len(self.spss))
+        self.assertEqual(combined["source"].value_counts().to_dict(), {"master": 400, "spss": 300})
+        self.assertEqual(set(combined["survey_year"].dropna().astype(int)), {2020, 2024})
+        self.assertEqual(combined.attrs["source_id_key"], "insightrwanda_combined")
 
 
 class CombinedDatasetTests(unittest.TestCase):

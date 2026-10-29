@@ -9,7 +9,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from research.catalog import SourceProfile, aggregate_release_allowed, build_source_profile
+from research.catalog import (
+    SourceProfile,
+    aggregate_release_allowed,
+    build_source_profile,
+    combine_source_profiles,
+)
 from research.spss_pipeline import (
     SPSS_SOURCE_ID,
     build_spss_profile,
@@ -48,6 +53,7 @@ from research.joint import (
     MEASURES,
     SOURCE_LABELS as JOINT_SOURCE_LABELS,
     TARGETS,
+    build_combined_analysis_frame,
     build_joint_frame,
     comparison_note,
     evaluate_transport,
@@ -193,20 +199,20 @@ footer { display: none !important; }
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div:hover { border-color:#8fc7a8; }
 [data-testid="stSidebar"] [data-testid="stSelectbox"] svg { fill:#059669; }
 [data-testid="stSidebar"] .stButton { width:100%; margin:.12rem 0; }
-[data-testid="stSidebar"] .stButton button { width:100% !important; display:flex; align-items:center; border:1px solid transparent; border-radius:10px; background:transparent; color:#3f574d; font-size:.78rem; font-weight:600; padding:.56rem .72rem; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
+[data-testid="stSidebar"] .stButton button { width:100% !important; display:flex; align-items:center; border:1px solid transparent; border-radius:10px; background:transparent; color:#3f574d; font-family:'Roboto', Arial, Verdana, sans-serif; font-size:.84rem; font-weight:600; letter-spacing:.005em; padding:.56rem .72rem; transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease; }
 [data-testid="stSidebar"] .stButton button,
 [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"],
 [data-testid="stSidebar"] [data-testid="stBaseButton-primary"] { justify-content:flex-start !important; text-align:left !important; }
-[data-testid="stSidebar"] .stButton button p { font-size:.78rem; font-weight:600; width:100% !important; margin:0 !important; text-align:left !important; justify-content:flex-start !important; }
-/* The active (primary) nav item keeps its dark-green label on the soft green pill:
-   the blanket sidebar text colour would otherwise repaint the label on top of it. */
+[data-testid="stSidebar"] .stButton button p { font-family:'Roboto', Arial, Verdana, sans-serif; font-size:.84rem !important; font-weight:600; width:100% !important; margin:0 !important; text-align:left !important; justify-content:flex-start !important; }
+/* The active nav item is deliberately high-contrast so the current page is obvious. */
 [data-testid="stSidebar"] .stButton button[kind="primary"],
-[data-testid="stSidebar"] .stButton button[kind="primary"] p { color:#14532d !important; }
+[data-testid="stSidebar"] .stButton button[kind="primary"] p { color:#fff !important; }
 [data-testid="stSidebar"] .stButton button[kind="secondary"]:hover { background:#e2f0e8; border-color:#cfe0d5; color:#17213d; }
 [data-testid="stSidebar"] .stButton button[kind="secondary"]:active { transform:translateX(2px) scale(.99); }
-/* Active nav item: soft green pill, rounded corners, darker text */
-[data-testid="stSidebar"] .stButton button[kind="primary"] { background:#d3f1df; border-color:#bfe6cf; color:#14532d; box-shadow:0 3px 10px rgba(5,150,105,.10); }
-[data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#c3ead4; border-color:#aaddc2; color:#14532d; transform:translateX(3px); box-shadow:0 5px 14px rgba(5,150,105,.16); }
+/* Active nav item: high-contrast blue pill, rounded corners, white text */
+[data-testid="stSidebar"] .stButton button[kind="primary"] { background:#3155d4; border-color:#3155d4; color:#fff; font-weight:700; box-shadow:0 4px 12px rgba(49,85,212,.25); }
+[data-testid="stSidebar"] .stButton button[kind="primary"] svg { fill:#fff; }
+[data-testid="stSidebar"] .stButton button[kind="primary"]:hover { background:#2443b8; border-color:#2443b8; color:#fff; transform:translateX(3px); box-shadow:0 6px 16px rgba(49,85,212,.32); }
 .side-card { border:1px solid #cfe0d5; background:#f6fbf8; border-radius:12px; padding:.75rem .8rem; margin:1rem .1rem 0; }
 .side-card-title { font-size:.7rem; font-weight:700; color:#14532d !important; font-family:'Roboto Mono','Courier New',monospace; text-transform:uppercase; letter-spacing:.12em; }
 .side-card-copy { font-size:.66rem; line-height:1.55; color:#5b6f66 !important; margin-top:.35rem; }
@@ -338,8 +344,10 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .st-key-ask_panel {
   position: fixed; right: 1.4rem; bottom: 5.35rem; z-index: 1001;
   width: min(398px, calc(100vw - 2.8rem));
-  /* Keep the panel's top edge below the page header on short viewports too. */
-  max-height: min(calc(100vh - 14.5rem), 660px); overflow-y: auto; overflow-x: hidden;
+  /* Keep the assistant panel fixed; only the message history below is scrollable. */
+  height: min(540px, calc(100vh - 14.5rem));
+  max-height: min(540px, calc(100vh - 14.5rem));
+  overflow: hidden;
   background: var(--card); border: 1px solid var(--line); border-radius: 18px;
   box-shadow: 0 24px 60px rgba(23,37,84,.24); padding: .85rem .9rem 1rem;
   animation: ask-in .18s ease-out both;
@@ -362,7 +370,7 @@ button, [role="button"] { font-family:'Inter', 'Segoe UI', system-ui, Arial, san
 .ask-badge { font-size: .65rem; line-height: 1.45; color: #3f4a66; background: #eef3ff;
   border: 1px solid #d5defb; border-radius: 9px; padding: .4rem .55rem; }
 .st-key-ask_history_zone { border: 1px solid var(--line); border-radius: 12px; background: #fbfcff;
-  padding: .55rem .6rem; overflow-anchor: none; }
+  padding: .55rem .6rem; overflow: auto; overflow-anchor: none; }
 .st-key-ask_history_zone button[kind="secondary"] { font-size: .72rem; font-weight: 600;
   justify-content: flex-start; text-align: left; line-height: 1.35; padding: .42rem .55rem; border-radius: 9px; }
 .ask-empty { margin: .15rem 0 .5rem; }
@@ -438,7 +446,7 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--green
   /* On phones the header wraps; anchor the panel below it rather than letting
      a bottom-anchored max-height creep up over the brand row. */
   .st-key-ask_panel { left: .6rem; right: .6rem; top: 16.5rem; bottom: 4.85rem; width: auto;
-    max-height: none; border-radius: 16px; }
+    height: calc(100vh - 21.35rem); max-height: calc(100vh - 21.35rem); border-radius: 16px; }
   .ask-head { padding-right: 4.4rem; }
   .ask-title { font-size: .88rem; }
   .ask-subtitle { font-size: .7rem; }
@@ -543,6 +551,13 @@ def _toggle_sidebar() -> None:
     st.session_state["sidebar_collapsed"] = not st.session_state.get("sidebar_collapsed", False)
 
 
+def _select_nav(page: str) -> None:
+    """Persist the selected page before Streamlit rerenders the sidebar."""
+
+    st.session_state["workspace_nav"] = page
+    st.session_state["mobile_drawer_open"] = False
+
+
 # Icon-only rail: labels, selectors and captions hidden, icons centred.
 COLLAPSED_SIDEBAR_CSS = """
 <style>
@@ -621,8 +636,8 @@ def account_dialog(profile: SourceProfile) -> None:
         **Role** — read-only analysis. You can filter, explore and ask questions about the evidence,
         but the underlying survey records are never modified or exported raw.
 
-        **Where numbers come from** — see *Methods & sources* for provenance and *Data quality*
-        for the checks run before any number is shown.
+        **Where numbers come from** — see *Methods & sources* for provenance and the checks
+        run before any number is shown.
         """
     )
 
@@ -637,18 +652,17 @@ def reset_assistant_dialog() -> None:
 
 
 def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) -> str:
-    """Left rail: brand + collapse toggle, survey-year scope, three labelled nav
+    """Left rail: brand + collapse toggle, survey-year scope, nav
     groups with outline icons, a primary action pinned near the bottom, and the
     profile section with its account menu."""
     nav_pages = [
         "Overview", "Financial inclusion", "Poverty insights", "Geographic insights",
-        "Resilience lab", "Predictive insights", "Data quality", "Data explorer",
+        "Resilience lab", "Predictive insights", "Data explorer",
         "Methods & sources", "About the build",
     ]
     nav_groups = [
-        ("", nav_pages[:6], ""),
-        ("Governance", nav_pages[6:8], "Checks, access and data protection"),
-        ("How it is built", nav_pages[8:], "Methods, sources and background"),
+        ("", nav_pages[:7], ""),
+        ("How it is built", nav_pages[7:], "Methods, sources and background"),
     ]
     numbers = {page: f"{index:02d}" for index, page in enumerate(nav_pages, start=1)}
     current = st.session_state.get("workspace_nav", "Overview")
@@ -686,17 +700,15 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
             if group_hint:
                 st.markdown(f'<div class="side-caption">{group_hint}</div>', unsafe_allow_html=True)
             for page in group_pages:
-                pressed = st.button(
+                st.button(
                     f"{numbers[page]} · {page}",
                     key=f"nav_{numbers[page]}",
                     icon=NAV_ICONS[page],
                     type="primary" if page == current else "secondary",
                     width="stretch",
+                    on_click=_select_nav,
+                    args=(page,),
                 )
-                if pressed:
-                    current = page
-                    st.session_state["workspace_nav"] = page
-                    st.session_state["mobile_drawer_open"] = False
         st.markdown(
             '<div class="side-card"><div class="side-card-title">Pages at a glance</div><div class="side-card-copy">'
             "01 Overview — headline numbers for all of Rwanda<br>"
@@ -705,10 +717,9 @@ def nav(df: pd.DataFrame, profile: SourceProfile, checks: list[QualityCheck]) ->
             "04 Geographic insights — province and district comparisons<br>"
             "05 Resilience lab — who can absorb a financial shock<br>"
             "06 Predictive insights — a test model, with its limits<br>"
-            "07 Data quality — checks run before numbers are shown<br>"
-            "08 Data explorer — build your own summary tables<br>"
-            "09 Methods &amp; sources — where each number comes from<br>"
-            "10 About the build — purpose and honesty notes</div></div>",
+            "07 Data explorer — build your own summary tables<br>"
+            "08 Methods &amp; sources — where each number comes from<br>"
+            "09 About the build — purpose and honesty notes</div></div>",
             unsafe_allow_html=True,
         )
         with st.container(key="side_actions"):
@@ -2306,7 +2317,7 @@ def render_quality(df: pd.DataFrame, profile: SourceProfile, checks: list[Qualit
 
 def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
     page_intro(
-        "09 / Methods & sources",
+        "08 / Methods & sources",
         "A traceable route from source file to displayed result.",
         "This page separates what is known about the supplied materials, what the application calculated, and what still needs research governance or documentation before publication.",
     )
@@ -2353,10 +2364,6 @@ def render_methods(profile: SourceProfile, checks: list[QualityCheck]) -> None:
         unsafe_allow_html=True,
     )
 
-    section_head("Available source materials", "What was actually found in the workspace")
-    dataframe_fit(pd.DataFrame({"Material": list(profile.documentation), "Use": ["Competition scope and evaluation criteria", "Embedded survey variable and value labels"]}), hide_index=True, width="stretch")
-    st.markdown('<div class="callout"><strong>Governance boundary.</strong><br>The application distinguishes file existence, metadata inspection, permitted analysis, validation and public publication. The supplied workspace contains no authorization or publication approval record, so the app is suitable for internal analysis and demonstration, not an approved public statistical release.</div>', unsafe_allow_html=True)
-
     section_head("Indicator methodology", "Verified source mapping for the current financial-inclusion slice")
     method_rows = [{"ID": d.indicator_id, "Definition": d.definition, "Valid responses": d.valid_response_rule, "Calculation": d.method, "Limitations": " ".join(d.limitations)} for d in INDICATORS.values()]
     dataframe_fit(pd.DataFrame(method_rows), hide_index=True, width="stretch", height=320)
@@ -2369,7 +2376,7 @@ def render_about(df: pd.DataFrame) -> None:
         with _left_logo:
             st.image(str(LOGO_PATH), width=190)
     page_intro(
-        "10 / About the build",
+        "09 / About the build",
         "A competition-ready decision tool, grounded in NISR data.",
         "InsightRwanda translates a large financial-inclusion survey into a presentation-ready interface for policy teams, financial-service providers and civil-society partners.",
     )
@@ -2469,18 +2476,6 @@ def render_about(df: pd.DataFrame) -> None:
     ], columns=["Scenario", "Expected direction"])
     dataframe_fit(outlook, hide_index=True, width="stretch")
     st.info("The supplied workspace contains cross-sectional survey waves, not a longitudinal outcome series. Future quantities therefore need follow-up survey waves or programme monitoring before they can be forecast numerically.")
-
-    section_head("Hackathon alignment", "How the prototype answers the judging criteria")
-    criteria = pd.DataFrame([
-        ["Problem relevance", "Targets financial exclusion, poverty dynamics and household shock absorption."],
-        ["Data + methodology", "Uses NISR-labelled Stata survey data, household weights and transparent indicators."],
-            ["Tech innovation", "Turns the supplied survey into an interactive targeting and resilience workflow."],
-        ["Usability + design", "Custom navigation, responsive layout, plain-language narrative and downloadable evidence."],
-        ["Tangible impact", "Surfaces where to strengthen buffers, assisted digital access and shock-responsive finance."],
-    ], columns=["Criterion", "Prototype response"])
-    dataframe_fit(criteria, hide_index=True, width="stretch")
-    st.markdown(f'<div class="footer-note">Dataset loaded successfully: {len(df):,} rows available · selected analytical slice loaded on demand for a fast presentation experience.</div>', unsafe_allow_html=True)
-
 
 def lens_signature(df: pd.DataFrame, page: str) -> str | None:
     """Human-readable description of the active analysis lens (None = page has none)."""
@@ -2911,7 +2906,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 _ask_process(str(pending), df, profile, checks)
 
         messages = _ask_history()
-        with st.container(key="ask_history_zone", height=320):
+        with st.container(key="ask_history_zone", height=140):
             if messages:
                 for message in messages:
                     _ask_render_message(message)
@@ -2990,50 +2985,21 @@ def load_combined_frame() -> pd.DataFrame:
     indicator denominator excludes rather than imputes.
     """
 
-    master = load_master_frame().copy()
-    spss = load_spss_workload(SPSS_PATH).copy()
-    master["source"] = "master"
-    spss["source"] = "spss"
-    # Survey year, documented by the supplied release names: the master file is
-    # the FinScope 2024 wave; the SPSS file is the FinScope 2020 wave (fieldwork
-    # September-November 2019 per official documentation).
-    master["survey_year"] = pd.array([2024] * len(master), dtype="Int64")
-    spss["survey_year"] = pd.array([2020] * len(spss), dtype="Int64")
-    # The head's sex is not observable on the SPSS subset (B0 only records
-    # whether the respondent is the head), so it stays missing there.
-    spss["head_sex"] = np.nan
-    combined = pd.concat([master, spss], ignore_index=True)
-    # Unscored resilience rows follow the master convention: 'Unknown', which
-    # the band computations exclude from their denominators.
-    combined["resilience_band"] = combined["resilience_band"].fillna("Unknown")
-    combined.attrs["source_id_key"] = COMBINED_SOURCE_ID
-    return combined
+    return build_combined_analysis_frame(load_master_frame(), load_spss_workload(SPSS_PATH))
 
 
 @st.cache_data(show_spinner=False)
 def load_combined_profile() -> SourceProfile:
     """Source profile for the combined pool, derived from the two source profiles."""
 
-    master_profile = load_source_profile(str(DATA_PATH))
-    spss_profile = load_spss_profile(SPSS_PATH)
-    return SourceProfile(
+    return combine_source_profiles(
+        load_source_profile(str(DATA_PATH)),
+        load_spss_profile(SPSS_PATH),
         source_id=COMBINED_SOURCE_ID,
-        path=f"{master_profile.path} + {spss_profile.path}",
-        format="Stacked Stata .dta + SPSS .sav (two independent samples)",
-        file_size_mb=round(master_profile.file_size_mb + spss_profile.file_size_mb, 2),
-        source_sha256=f"{master_profile.source_sha256[:16]}+{spss_profile.source_sha256[:16]}",
-        analysis_version=f"{master_profile.analysis_version} + {spss_profile.analysis_version}",
-        rows=master_profile.rows + spss_profile.rows,
-        source_variables=master_profile.source_variables + spss_profile.source_variables,
         analytical_variables=len(PIPELINE_COLUMNS),
         mapped_variables=len(PIPELINE_COLUMNS),
-        source_release="Not documented in supplied materials",
         population_period="FinScope 2024 wave (master); FinScope 2020 wave (SPSS, fieldwork Sept-Nov 2019)",
-        metadata_status="Both sources inspected; embedded variable and value labels available",
         analysis_status="Combined pool ready; measures absent on one file are computed on the records where they are observed",
-        authorization_status="Unknown: no authorization record supplied",
-        publication_status="Not approved: no disclosure/publication approval supplied",
-        documentation=("2026 Hackathon Competition.pdf", "Embedded Stata and SPSS variable/value labels"),
         notes=(
             "The two files share no record key; the combined dataset stacks them as two independent samples on the harmonized variables.",
             "Measures with no counterpart on the SPSS wave (own money, saving behaviour and social support) stay missing there and are never imputed; labeled income bands are harmonized from N4A/N4B.",

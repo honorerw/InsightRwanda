@@ -282,6 +282,38 @@ def build_joint_frame(
     return joint
 
 
+def build_combined_analysis_frame(
+    master: pd.DataFrame,
+    spss: pd.DataFrame,
+    wave_years: dict[str, int | None] | None = None,
+) -> pd.DataFrame:
+    """Stack the fully enriched source frames used by dashboard pages.
+
+    ``build_joint_frame`` intentionally keeps only harmonized fields required by
+    cross-source comparisons and transport modeling. The dashboard and brief
+    renderers need the wider source union as well, so this construction lives in
+    the research layer instead of being duplicated by the app and scripts.
+    """
+
+    years = {**WAVE_YEARS, **(wave_years or {})}
+    parts: list[pd.DataFrame] = []
+    for source, frame in (("master", master), ("spss", spss)):
+        part = frame.copy()
+        part["source"] = source
+        part["survey_year"] = pd.array([years.get(source)] * len(part), dtype="Int64")
+        if source == "spss":
+            # The SPSS subset identifies whether the selected respondent is the
+            # head, but does not carry the household head's sex.
+            part["head_sex"] = np.nan
+        parts.append(part)
+
+    combined = pd.concat(parts, ignore_index=True, sort=False)
+    if "resilience_band" in combined:
+        combined["resilience_band"] = combined["resilience_band"].fillna("Unknown")
+    combined.attrs["source_id_key"] = "insightrwanda_combined"
+    return combined
+
+
 def build_combined_dataset(
     master: pd.DataFrame,
     spss: pd.DataFrame,

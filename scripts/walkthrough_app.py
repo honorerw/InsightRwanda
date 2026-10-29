@@ -25,7 +25,6 @@ PAGES = [
     "Geographic insights",
     "Resilience lab",
     "Predictive insights",
-    "Data quality",
     "Data explorer",
     "Methods & sources",
     "About the build",

@@ -33,7 +33,6 @@ PAGES: list[tuple[str, str]] = [
     ("Geographic insights", "geography of exclusion"),
     ("Resilience lab", "most exposed to the next shock"),
     ("Predictive insights", "One honest predictive model"),
-    ("Data quality", "what was checked"),
     ("Data explorer", "Keep the evidence one click"),
     ("Methods & sources", "traceable route"),
     ("About the build", "competition-ready decision tool"),

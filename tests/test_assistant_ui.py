@@ -40,7 +40,7 @@ class AssistantPanelUiTests(unittest.TestCase):
 
     def test_launcher_opens_and_closes_the_panel_on_the_same_page(self) -> None:
         nav_before = [button.label for button in self.at.button if button.label[:2].isdigit()]
-        self.assertEqual(len(nav_before), 10)
+        self.assertEqual(len(nav_before), 9)
         self.assertFalse(any(button.label == "Close" for button in self.at.button))
         self.assertTrue(any(button.label == "Insight Assistant" for button in self.at.button))
         self.assertNotIn("ask_open", self.at.session_state)

@@ -65,6 +65,13 @@ class MobileDrawerUiTests(unittest.TestCase):
         self.assertFalse(self.drawer_css_injected())
         self.assertEqual(self.at.session_state["workspace_nav"], "Poverty insights")
 
+    def test_clicked_page_is_highlighted_after_one_click(self) -> None:
+        self.at.button(key="nav_02").click()
+        self.at.run()
+        self.assertEqual(self.at.session_state["workspace_nav"], "Financial inclusion")
+        self.assertEqual(self.at.button(key="nav_02").proto.type, "primary")
+        self.assertEqual(self.at.button(key="nav_01").proto.type, "secondary")
+
     def test_desktop_collapse_toggle_still_collapses_the_rail(self) -> None:
         self.at.button(key="sidebar_collapse").click()
         self.at.run()

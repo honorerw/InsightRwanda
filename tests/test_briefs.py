@@ -135,7 +135,7 @@ class GoldenSourceBriefTests(unittest.TestCase):
         cls.profile = build_source_profile(SOURCE, analytical_variables=94)
         cls.checks = run_quality_checks(cls.data, source_variable_count=cls.profile.source_variables)
 
-    def test_all_nine_page_briefs_build_from_the_real_source(self):
+    def test_all_ten_page_briefs_build_from_the_real_source(self):
         briefs = build_all_briefs(self.data, self.profile, self.checks)
         self.assertEqual(len(briefs), len(PAGES))
         for brief in briefs.values():

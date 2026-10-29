@@ -2,142 +2,313 @@
 
 [![CI](https://github.com/honorerw/InsightRwanda/actions/workflows/ci.yml/badge.svg)](https://github.com/honorerw/InsightRwanda/actions/workflows/ci.yml)
 
-InsightRwanda is a Streamlit research and analytics platform for the NISR 2026 Big Data Hackathon, focused on Financial Inclusion & Poverty Reduction in Rwanda.
+InsightRwanda is a Streamlit research and analytics platform for the NISR 2026
+Big Data Hackathon, Track 2: Financial Inclusion & Poverty Reduction in Rwanda.
+It turns two supplied FinScope survey files into traceable weighted descriptive
+evidence, geographic comparisons, an exploratory resilience lens, and a local
+evidence assistant.
 
-The application is connected to **two supplied sources**: the master `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta` (Stata, 13,994 households, the FinScope 2024 wave) and the second source `data/Rwanda FinScope 2020_Final Data.sav` (SPSS, 12,480 individual respondents, the FinScope 2020 wave). Every page analyses **one combined dataset** that pools both waves as independent samples on the harmonized measures — no sidebar source selector; where a measure lacks a label-verified counterpart on one wave, its estimate is computed on the records where it is observed and never imputed. The two files share **no record key** (0 of 12,480 SPSS keys match a master key), so they are never merged: the pool keeps the source as a dimension and reports the source gap instead of a fabricated household link. It does not claim an official poverty estimate because the workspace does not include a documented poverty line, welfare aggregate, sampling methodology, variance method, authorization record, or publication approval.
+The project is deliberately conservative: it does not fabricate an official
+poverty rate, does not claim a causal effect or official trend, and does not
+publish household-level records without governance approval.
 
-## What is implemented
+## Current status
 
-- Custom branded Streamlit sidebar and navigation with the default header, footer and toolbar hidden.
-- Real Stata loading through `research/data_pipeline.py` and second-source SPSS loading through `research/spss_pipeline.py` (label-verified alias mapping onto the master schema; `pyreadstat`).
-- A documented 94-variable analytical slice from the 2,442-variable source file.
-- A **combined dataset** as the single analysis source with a per-page **Survey year** filter (2020 SPSS wave vs 2024 master wave), honest scope notes, and a cross-source agreement table (same indicator rules applied to both supplied files, no merging).
-- A **combined view** (`research/joint.py`): a linkage audit that measures the zero key overlap (including a chance-level check on province/district/age/sex pairs), pooled estimates for the seven shared measures with an equal-source weight, a weighted relationship matrix, and a transport check that trains the same non-leaking model within each file, across files in both directions and on the pooled frame for both shared outcomes.
-- Explicit wave/year handling: the master Stata file is supplied as the FinScope 2024 wave (release name) and the SPSS file as the FinScope 2020 wave (release and file timestamp; official fieldwork September-November 2019). `research/joint.py::WAVE_YEARS` is the single place where a documented year can be revised.
-- **One combined dataset on disk**: `python scripts/build_combined_dataset.py` writes `data/derived/insightrwanda_combined.csv` (26,474 stacked rows, 20 harmonized columns) plus a metadata manifest with both source hashes, the zero-key-linkage audit and the column dictionary. Source keys are replaced by deterministic hashed record ids; `data/derived/` is git-ignored because the rows are respondent-level records.
-- Structural data-quality checks for schema, row count, identifier uniqueness, weights, codes, geographic consistency and missingness.
-- Verified financial-inclusion indicators using embedded Stata variable labels:
-  - active formal financial access;
-  - current mobile-money use;
-  - emergency-fund coverage;
-  - emergency liquidity difficulty;
-  - income pressure;
-  - internet access.
-- Household-weighted estimates with visible denominators and source variables.
-- Geographic comparisons using the supplied province/district identifiers.
-- An explicit poverty-status page that reports blockers rather than fabricating poverty rates.
-- Governance-gated aggregate data explorer; household-level preview and raw export stay disabled pending explicit authorization, publication approval and an approved disclosure rule.
-- One-page, non-gated insight brief for every page (PDF + PNG) — committed copies in `docs/briefs/`; aggregate values only, no household records.
-- A dedicated Predictive insights page: candidate comparison under group-stratified cross-validation, held-out scorecard, threshold trade-off analysis and subgroup model performance with low-evidence flags.
-- Methods, source profile, governance status and evidence-chain pages.
-- Real-source tests in `tests/test_real_pipeline.py` plus estimation, brief, and second-source SPSS suites (including a synthetic `.sav` fixture and a real 12,480-row integration test).
+- Nine-page Streamlit dashboard.
+- One combined analysis pool containing both supplied waves.
+- Survey-year lens for 2020, 2024, or both waves.
+- Six verified financial-inclusion indicators.
+- Three descriptive income-context estimates.
+- Transparent four-component resilience heuristic.
+- Geographic comparisons and district drill-downs.
+- Cross-source linkage audit, pooled estimates, relationship matrix, and model
+  transport checks.
+- Non-leaking predictive workflow with holdout, threshold, calibration, and
+  subgroup diagnostics.
+- Deterministic local Evidence Assistant with verified inline charts.
+- Governance-gated aggregate explorer and downloads.
+- Aggregate-only one-page briefs in `docs/briefs/` and reference screenshots in
+  `docs/screenshots/`.
+- 147 `unittest` test methods in the repository.
 
-## Run locally
+## Quick start
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+source .venv/bin/activate                 # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Run the real-source test suite with:
+Run the complete test suite after installing dependencies:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The current test suite contains 170 tests, including a modeling suite that verifies the leakage guard, grouped splitting, candidate evaluation, the end-to-end workflow on the real source and the page-surface artifact helpers (holdout scoring, threshold trade-offs, PR sweep, subgroup performance). A joint-source suite (`tests/test_joint.py`) verifies the zero-overlap linkage audit, equal-source weight rescaling, weighted correlations and cross-tabs, the leakage-free transport evaluation, the combined-dataset export contract and the pooled estimates on both real files. It exercises the supplied Stata file
-as well as small synthetic fixtures for invalid weights, unexpected response
-codes, duplicate identifiers, geographic inconsistencies, missing schemas,
-filtering, source errors, publication gates, bootstrap intervals, income-band
-context estimates, the official-poverty unlock contract and the ten one-page
-briefs (content, weighting arithmetic, deterministic rendering, PDF/PNG validity
-and identifier exclusion).
+Other verification and generation commands:
 
-## Ask InsightRwanda Evidence Assistant
+```bash
+python -m py_compile app.py research/*.py scripts/*.py tests/*.py
+python scripts/walkthrough_app.py
+python scripts/browser_render_check.py
+python scripts/build_briefs.py
+python scripts/build_combined_dataset.py
+```
 
-The floating **Evidence Assistant** button at the bottom-right of every page opens an
-in-screen chat panel — no external website, no page reload. The panel keeps its
-conversation in Streamlit session state, shows a loading
-indicator, a **New conversation** action, and a **Close** button.
+The browser checks require Chrome or Chromium. `websockets` is declared in
+`requirements.txt` because the browser scripts communicate through Chrome's
+DevTools Protocol.
 
-The assistant is **evidence-first**:
+## What the application does
 
-- The deterministic core (`research/assistant.py`) answers from the project's
-  verified indicator definitions, calculation rules, documented limitations,
-  quality checks, navigation and data-governance status. Numeric answers are
-  computed live from the loaded survey records at the active lens, with the
-  survey's household weight and visible denominators.
-- Ask for a graph and the assistant shows one: a bar chart of the indicator's
-  verified weighted share by province, district or urban/rural setting (for
-  example “Show FI-04 by province as a bar chart”), with the numbers behind it
-  in a table under the chart. Chart numbers come from the same tested
-  calculation functions as every dashboard figure.
-- It refuses household-level or personal requests and says plainly when
-  information is unavailable or unverified; it never invents statistics,
-  sources, intervals, geographic findings or research conclusions.
-The assistant is fully local. It uses only the deterministic rules in
-`research/assistant.py` and the currently loaded survey data; unsupported
-questions are marked unavailable. No API key, external model, network request
-or third-party service is used.
+### Dashboard pages
 
-## Reproducibility record
+1. **Overview** — national weighted signal and the access-versus-buffer gap.
+2. **Financial inclusion** — FI-01…FI-06 definitions, denominators, estimates,
+   intervals, and cross-wave comparison.
+3. **Poverty insights** — income/liquidity context and the blocked official
+   poverty-estimation checklist.
+4. **Geographic insights** — province and district comparisons plus drill-down.
+5. **Resilience lab** — component-level resilience lens and action prompts.
+6. **Predictive insights** — candidate comparison, held-out evaluation,
+   thresholds, calibration, and subgroup performance.
+7. **Data explorer** — governance-gated aggregate analysis.
+8. **Methods & sources** — hashes, inventories, evidence chain, and limitations.
+9. **About the build** — product thesis, analysis workflow, solutions, and
+   evidence-based outlook.
 
-The supplied source is loaded read-only from `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta`:
+The sidebar Survey year filter is applied once in `main()` before page rendering,
+so pages, briefs, and assistant answers share the same scope. Page filters use the
+shared province, district, setting, and respondent-sex filtering path.
 
-- rows loaded: 13,994;
-- source variables inventoried: 2,442;
-- analytical slice: 94 documented source variables, plus derived labels and indicators;
-- SHA-256: `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae`;
-- analysis version at this audit: `financial_inclusion_3d668fd37080` (generated from the calculation, loading, quality-check and estimation code at runtime; previous audit values `financial_inclusion_f43dfd9a140b`, then `financial_inclusion_135869b472e3`).
+### Evidence Assistant
 
-The analysis version changes when relevant research logic changes. The source
-hash is calculated from the actual file bytes, not from its filename or metadata.
+The assistant is fully local and deterministic. It uses the indicator registry,
+estimation rules, source profile, quality checks, page narratives, and the active
+loaded frame. Numeric answers are computed with the same tested functions as the
+dashboard. It can draw verified weighted indicator charts by province, district,
+or urban/rural setting.
 
-## Verified indicator rules
+It refuses household-level, personal, unsupported, and unverified requests. User
+text is escaped before display, conversation state stays in the Streamlit session,
+and no API key, external model, network request, or third-party service is used.
 
-All six current indicators use positive, finite `hh_wt` values. Missing,
-unexpected and non-substantive responses are excluded from the indicator-specific
-denominator; they are not silently treated as negative responses.
+## Data sources
 
-- FI-01 active formal financial access: any valid `qf4_01`–`qf4_06` response equal to 1, denominator rows with at least one valid 1/2 response.
-- FI-02 current mobile-money use: `qf4_05 == 1`, valid `qf4_05` responses are 1/2.
-- FI-03 emergency-fund coverage: `e9b == 1`, valid `e9b` responses are 1/2.
-- FI-04 emergency money is difficult to raise: `e9c` in 1/2, denominator substantive 1/2/3 responses; code 99 is excluded.
-- FI-05 income pressure: `e7` in 1/2, denominator valid 1/2/3/4 responses.
-- FI-06 internet access: `c14_5 == 1`, valid `c14_5` responses are 1/2.
+### FinScope 2024 Stata source
 
-The project calculates descriptive, weighted estimates. It does not claim
-official publication status or survey-design standard errors because the
-workspace does not supply the required methodology and variance documentation.
-Bootstrap interval estimates (nonparametric, weighted, seeded) are provided
-for every financial-inclusion indicator by the estimation layer
-(`research/estimation.py`, covered by its own test suite) with an explicit note
-that they are not survey-design standard errors. Labelled income-band context
-estimates (EI-01…EI-03, from the embedded N11a_lbl/N12a_lbl band labels)
-surfaced earlier as exploratory financial context on the Poverty insights page
-and remain part of that layer and the page briefs: they are not
-poverty rates. An official poverty estimation stays blocked behind a
-code-enforced contract (`official_poverty_status`) until a documented poverty
-line, poverty concept, welfare aggregate, variance documentation,
-authorization record and publication approval are all supplied explicitly.
+File: `data/FinScope 2024, Financial Inclusion in Rwanda - Rwanda.dta`
 
-One-page insight briefs per dashboard page (PDF and PNG, one per page,
-nine total; committed copies in `docs/briefs/`, regenerated with
-`python scripts/build_briefs.py`). Briefs contain aggregate
-values only — never household records or gated exports — and repeat what their
-numbers cannot claim. The PDF embeds the same rendered page as the PNG
-(Pillow, 200 dpi), so brief text is an image, not selectable text.
+- 13,994 household rows.
+- 2,442 source variables.
+- 94 documented source variables loaded for the analytical slice.
+- Household weight: `hh_wt`; population weight: `pop_wt`.
+- SHA-256: `5c183d0fdf9fbf02d170a5ed28e96fa112ea2318fea0ff6d9f8e95699f5bd7ae`.
 
-## Research boundaries
+### FinScope 2020 SPSS source
 
-The supplied file is structurally usable for the financial-inclusion slice, but source release/period details and survey-design variance metadata are not documented in the workspace. Rates are therefore descriptive, use `hh_wt`, and do not display standard errors. The resilience score is an exploratory prioritisation lens, not an official poverty or welfare model.
+File: `data/Rwanda FinScope 2020_Final Data.sav`
 
-The original Stata file and competition PDF are read-only inputs. The application does not upload them, modify them, or expose household-level records by default.
+- 12,480 individual respondent rows.
+- `KEY` can repeat across members of one household.
+- A documented subset is loaded with `pyreadstat`.
+- Native fields are mapped only when embedded labels verify equivalent concepts.
+- Current-use channels come from `QF5_*`; this file's `QF4_*` means registered in
+  the respondent's own name and is not conflated with the master's current-use
+  `qf4_*` module.
+- `NUMVILL` is retained as a documented PSU field, but complete variance and
+  strata documentation is not supplied.
+- SHA-256:
+  `552651916c60752ef360be7018f04c45adaea328aeb8a5762ede79c5c04d58f8`.
 
-The source has no supplied authorization record or publication approval. As a
-result, the Data Explorer withholds aggregate tables and exports until both
-approvals and a disclosure rule are recorded in the source profile. Metadata,
-quality checks, documentation review and the verified internal analytical slice
-remain available separately from publication eligibility.
+### Pooling and linkage rule
+
+The files share no record key and are never joined. `linkage_audit()` reports the
+zero key overlap and a composite-pair diagnostic. The source remains an explicit
+dimension in every combined result.
+
+Pooled estimates rescale each source's supplied weight to equal source mass. This
+is an explicit exploratory choice, not an official combined survey weight. The
+different row units—households in the Stata source and respondents in the SPSS
+source—mean pooled values must not be presented as an official national trend or
+causal change estimate.
+
+## Analytical pipeline
+
+```text
+Stata .dta ──┐
+             ├─> source loaders ─> enriched frames ─> combined analysis frame
+SPSS .sav ───┘                                      │
+                                                    ├─> quality checks
+                                                    ├─> indicators/context estimates
+                                                    ├─> geography/resilience/modeling
+                                                    ├─> local evidence assistant
+                                                    └─> Streamlit pages and briefs
+```
+
+There are two combined representations in `research/joint.py`:
+
+- `build_combined_analysis_frame()` preserves the wider union of enriched source
+  columns for dashboard pages and brief generation.
+- `build_joint_frame()` retains the harmonized fields required for pooled
+  comparisons, relationships, and transport modeling.
+
+`build_combined_dataset()` writes a local respondent-level artifact to
+`data/derived/insightrwanda_combined.csv` with deterministic hashed record IDs.
+The `data/derived/` directory is Git-ignored because it contains respondent-level
+rows; the application does not publish it.
+
+## Verified indicators
+
+All estimates require finite positive `hh_wt`. Missing, unexpected, and
+non-substantive responses are excluded from the indicator denominator; they are
+not silently treated as negative responses. Numerator and denominator counts are
+visible in the dashboard.
+
+| ID | Meaning | Valid response rule |
+|---|---|---|
+| FI-01 | Any active formal channel | at least one valid 1/2 channel response is 1 |
+| FI-02 | Current mobile-money use | `qf4_05` is 1/2; estimate is the share equal to 1 |
+| FI-03 | Emergency-fund coverage | `e9b` is 1/2; estimate is the share equal to 1 |
+| FI-04 | Emergency money difficult to raise | `e9c` is 1/2/3; 1/2 is positive |
+| FI-05 | Income pressure | `e7` is 1/2/3/4; 1/2 is positive |
+| FI-06 | Internet access | `c14_5` is 1/2; estimate is the share equal to 1 |
+
+Indicator definitions, source variables, methods, verification notes, and
+limitations are maintained in `research/indicators.py` and surfaced in the app.
+
+## Estimation, resilience, and prediction
+
+The estimation layer provides seeded non-parametric bootstrap intervals. These
+capture row-resampling variability only and are not survey-design standard errors.
+Income-band estimates use embedded labels and are descriptive context, not poverty
+rates.
+
+`official_poverty_status()` keeps official poverty estimation blocked until the
+workspace supplies a documented poverty concept/line, welfare aggregate,
+equivalence rule, variance method, authorization record, and publication approval.
+
+The resilience score is the mean of four observed binary capabilities: emergency
+funds, owning money, saving regularly, and social safety net. Its `Priority`,
+`Watch`, and `Resilient` bands are an auditable prioritisation heuristic, not a
+welfare model.
+
+The predictive workflow excludes target-defining variables, uses appropriate
+grouped/stratified validation, attaches survey weights to fitting and metrics,
+and labels all findings as associations. It is not an eligibility, poverty, or
+causal model.
+
+## Governance and privacy
+
+The source profiles distinguish:
+
+1. file existence;
+2. metadata inspection;
+3. internal analysis; and
+4. public publication.
+
+`aggregate_release_allowed()` requires both authorization and publication status
+to begin with `Approved`. In the supplied workspace those approvals are absent,
+so the Data Explorer returns before exposing aggregate tables or downloads.
+
+Household-level rows and raw exports are not exposed. The application does not
+modify or upload the original source files.
+
+## Repository structure
+
+```text
+app.py                         Streamlit application and UI composition
+research/data_pipeline.py     Stata loading, enrichment, filtering, aggregation
+research/spss_pipeline.py     SPSS loading and verified aliases
+research/indicators.py        FI-01…FI-06 registry and calculations
+research/estimation.py        Bootstrap, income context, poverty contract
+research/quality.py           Structural and coding checks
+research/joint.py             Linkage, combined frames, pooling, transport
+research/modeling.py          Resilience predictive workflow
+research/briefs.py            Aggregate-only brief builders/renderers
+research/assistant.py         Local evidence answer/chart engine
+research/catalog.py           Profiles, hashes, governance gate
+scripts/                      Build, brief, walkthrough, and browser helpers
+tests/                        Unit, integration, modeling, assistant, UI tests
+data/                         Read-only survey sources and ignored derived data
+assets/                       Runtime logo asset
+docs/briefs/                  Generated aggregate-only PDF/PNG briefs
+docs/screenshots/             Reference UI screenshots
+.streamlit/config.toml        Streamlit runtime/theme configuration
+.github/workflows/ci.yml      CI compilation and unit-test workflow
+requirements.txt              Runtime and verification dependencies
+2026 Hackathon Competition.pdf Scope reference input
+```
+
+## Reproducibility
+
+- Source files are loaded read-only.
+- Source hashes are computed from actual file bytes.
+- The analysis fingerprint is generated at runtime from every non-package module
+  in `research/`, so changes to harmonization, indicators, quality, estimation,
+  modeling, briefs, joint analysis, or assistant logic change the fingerprint.
+- The combined source profile uses a deterministic SHA-256 digest derived from
+  both complete source hashes and retains the originals in its notes/manifest.
+- Run `python scripts/build_briefs.py` after research changes; it now uses the
+  same combined enriched frame as the dashboard.
+
+## Review findings and fixes
+
+The project review found and fixed:
+
+- brief generation previously used only the 2024 Stata source while the app used
+  both waves;
+- combined-frame construction was duplicated between the app and scripts;
+- combined provenance used a concatenated value under a SHA-256 label;
+- browser scripts used undeclared `websockets`;
+- documentation contained stale source-selector, page-count, and test-count text;
+- the analysis fingerprint omitted newer joint, SPSS, modeling, brief, and
+  assistant modules.
+
+These are now addressed in the research layer, scripts, requirements, tests, and
+this README.
+
+## Verification status
+
+Passed during the review:
+
+- `python -m py_compile app.py research/*.py scripts/*.py tests/*.py`;
+- `git diff --check`;
+- all 13 real Stata pipeline tests;
+- all 13 estimation tests;
+- all 13 brief tests;
+- synthetic combined-frame and combined-profile provenance checks.
+
+Full test discovery was attempted but could not complete in the review environment
+because `streamlit` and `pyreadstat` were not installed. Install
+`requirements.txt` and rerun the full command before deployment.
+
+## Remaining gaps and next steps
+
+### High priority
+
+- Supply sampling, strata, PSU, non-response, calibration, and survey-variance
+  documentation.
+- Define and independently review the official poverty concept, line, welfare
+  aggregate, equivalence scale, and variance method.
+- Add a versioned authorization record, disclosure-control rule, and publication
+  approval record; the current gate should remain closed until then.
+- Obtain a statistician-approved estimand and harmonized weighting method before
+  presenting pooled values as representative or longitudinal.
+
+### Medium priority
+
+- Pin dependencies with a tested Python version and lock/constraints file.
+- Extend CI to run the Streamlit AppTest walkthrough and browser check when a
+  browser is available.
+- Obtain a citable external codebook, release note, sampling document, and
+  fieldwork metadata to reduce semantic drift in aliases and wave labels.
+
+### Low priority
+
+- Add a tracked deployment manifest and health-check runbook covering hosting,
+  runtime, data access, memory, secrets, and source-file updates.
+
+Until these inputs are supplied, retain the current descriptive labels, source
+separation, visible limitations, and closed publication gates.

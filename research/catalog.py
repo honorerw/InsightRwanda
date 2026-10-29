@@ -58,12 +58,15 @@ def _sha256(path: Path) -> str:
 
 
 def _analysis_version() -> str:
-    """Fingerprint the calculation and validation code used by the app."""
+    """Fingerprint all research-layer code used by the app."""
 
     digest = hashlib.sha256()
     code_root = Path(__file__).resolve().parent
-    for name in ["data_pipeline.py", "indicators.py", "quality.py", "estimation.py"]:
-        digest.update((code_root / name).read_bytes())
+    for path in sorted(code_root.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        digest.update(path.name.encode("utf-8"))
+        digest.update(path.read_bytes())
     return f"financial_inclusion_{digest.hexdigest()[:12]}"
 
 
@@ -100,4 +103,46 @@ def build_source_profile(path: str | Path, analytical_variables: int) -> SourceP
             "No codebook, sampling methodology, poverty methodology, or release note was supplied in the workspace.",
             "The dashboard does not expose household-level records by default and does not publish the source file.",
         ),
+    )
+
+
+def combine_source_profiles(
+    primary: SourceProfile,
+    secondary: SourceProfile,
+    *,
+    source_id: str,
+    analytical_variables: int,
+    mapped_variables: int,
+    population_period: str,
+    analysis_status: str,
+    notes: tuple[str, ...],
+) -> SourceProfile:
+    """Create a reproducible profile for a stacked, non-joined source pool."""
+
+    return SourceProfile(
+        source_id=source_id,
+        path=f"{primary.path} + {secondary.path}",
+        format=f"Stacked {primary.format} + {secondary.format} (two independent samples)",
+        file_size_mb=round(primary.file_size_mb + secondary.file_size_mb, 2),
+        source_sha256=hashlib.sha256(
+            f"{primary.source_sha256}:{secondary.source_sha256}".encode("utf-8")
+        ).hexdigest(),
+        analysis_version=f"{primary.analysis_version} + {secondary.analysis_version}",
+        rows=primary.rows + secondary.rows,
+        source_variables=primary.source_variables + secondary.source_variables,
+        analytical_variables=analytical_variables,
+        mapped_variables=mapped_variables,
+        source_release="Not documented in supplied materials",
+        population_period=population_period,
+        metadata_status="Both sources inspected; embedded variable and value labels available",
+        analysis_status=analysis_status,
+        authorization_status="Unknown: no authorization record supplied",
+        publication_status="Not approved: no disclosure/publication approval supplied",
+        documentation=tuple(dict.fromkeys((*primary.documentation, *secondary.documentation))),
+        notes=(
+            *notes,
+            f"Primary source SHA-256: {primary.source_sha256}",
+            f"Secondary source SHA-256: {secondary.source_sha256}",
+        ),
+        psu_documented=primary.psu_documented and secondary.psu_documented,
     )
