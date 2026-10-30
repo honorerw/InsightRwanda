@@ -145,6 +145,10 @@ _THIS_REFERENCE = re.compile(
     r"(?:percentage|number|figure|share|rate|estimate|statistic|indicator|"
     r"chart|graph|page|view|dashboard|data|source)s?\b"
 )
+_GREETING = re.compile(
+    r"^(?:hi|hello|hey|hiya|howdy|yo|greetings|good\s+(?:morning|afternoon|evening|day))"
+    r"(?:\s+(?:there|everyone|all|team|folks))?[\s!.,?]*$"
+)
 
 
 def _normalize(question: str) -> str:
@@ -1023,6 +1027,23 @@ def _refusal(kind: str, question_text: str) -> AssistantAnswer:
     )
 
 
+def _greeting_answer() -> AssistantAnswer:
+    return AssistantAnswer(
+        question_kind="greeting",
+        answer=(
+            "Hello! I'm the InsightRwanda evidence assistant. I can explain what the project is, "
+            "any indicator (FI-01…FI-06 or EI-01…EI-03) in simple English, where a dashboard "
+            "number comes from, the documented limitations of an estimate, the data-quality "
+            "checks, the active survey source's evidence, and why no official poverty estimate "
+            "exists.\n"
+            "Ask a short question — for example: “What does FI-02 mean in simple English?”"
+        ),
+        references=(_page_reference(_FALLBACK_PAGE),),
+        grounded=False,
+        scope="general explanation",
+    )
+
+
 def _fallback_answer() -> AssistantAnswer:
     return AssistantAnswer(
         question_kind="fallback",
@@ -1070,6 +1091,8 @@ def _classify(text: str) -> str:
         return "injection"
     if any(re.search(pattern, low) for pattern in _PRIVACY_PATTERNS):
         return "privacy"
+    if _GREETING.match(low):
+        return "greeting"
     project_context = _PROJECT_TERMS.search(low) is not None
     if re.search(
         r"quality.{0,40}(limitation|caveat|weakness|problem|issue)|"
@@ -1186,6 +1209,9 @@ def answer_question(
         return _refusal("injection", question)
     if kind == "privacy":
         return _refusal("privacy", question)
+
+    if kind == "greeting":
+        return _greeting_answer()
 
     if kind == "identity":
         text, references = _identity_answer(frame, profile, checks)

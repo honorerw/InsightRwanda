@@ -64,6 +64,11 @@ from research.joint import (
 )
 from research.quality import QualityCheck, quality_summary, run_quality_checks
 from research.assistant import AssistantChart, MAX_QUESTION_LENGTH, answer_question, answer_with_chart
+from research.assistant_llm import (
+    answer_general_with_status,
+    get_configured_provider,
+    refine_answer_with_status,
+)
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -2621,12 +2626,46 @@ def explorer_gate_modal(profile: SourceProfile) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Ask InsightRwanda — local evidence-based assistant UI
-# Every answer and number is produced locally by research/assistant.py from
-# the loaded survey records. No external service is contacted.
+# Ask InsightRwanda — evidence-first assistant UI
+# Every project answer and number is produced locally by research/assistant.py
+# from the loaded survey records. When a Groq key is configured, questions the
+# offline core cannot answer are sent to the general-knowledge layer, and
+# verified answers may be reworded without exposing survey figures.
 # -----------------------------------------------------------------------------
+ASK_AI_STATUS: dict[str, str] = {
+    "disabled": "AI-polished wording is not enabled for this panel yet, so this answer uses "
+                "the verified project rules as written.",
+    "blocked": "This answer was kept entirely local because its evidence is not approved for "
+               "external sharing. No text from it was sent to an AI provider.",
+    "rate_limited": "The AI wording service is busy right now. The verified project answer is "
+                    "shown unchanged; please try again later.",
+    "invalid_key": "AI-polished wording is temporarily unavailable. The verified project answer "
+                   "is shown unchanged.",
+    "timeout": "The AI wording service did not respond in time. The verified project answer is "
+               "shown unchanged.",
+    "invalid_response": "The AI wording service returned no usable text. The verified project "
+                        "answer is shown unchanged.",
+    "unavailable": "The AI wording service is temporarily unavailable. The verified project "
+                   "answer is shown unchanged.",
+    "guard_rejected": "A protective check stopped the AI wording because it altered a verified "
+                      "figure. The verified project answer is shown unchanged.",
+}
+ASK_GENERAL_STATUS: dict[str, str] = {
+    "rate_limited": "The general-knowledge service is busy right now. The offline project "
+                    "answer is shown instead.",
+    "invalid_key": "The general-knowledge service is temporarily unavailable. The offline "
+                   "project answer is shown instead.",
+    "timeout": "The general-knowledge service did not respond in time. The offline project "
+               "answer is shown instead.",
+    "invalid_response": "The general-knowledge service returned no usable text. The offline "
+                        "project answer is shown instead.",
+    "unavailable": "The general-knowledge service is temporarily unavailable. The offline "
+                   "project answer is shown instead.",
+    "refused": "For safety, nothing was sent to the AI service for this question. The offline "
+               "project answer is shown.",
+}
 ASK_SUMMARY: str = (
-    "Ask about Rwanda's financial inclusion and poverty insights."
+    "Ask about Rwanda's financial inclusion and poverty insights — or any general question."
 )
 ASK_PAGE_HINTS: dict[str, str] = {
     "Overview": "FI-01",
@@ -2724,6 +2763,45 @@ def _ask_queue(question: str | None = None) -> None:
     st.session_state["ask_pending"] = question
 
 
+def _ask_setting(name: str) -> str:
+    """Read an assistant setting from Streamlit secrets, then the environment."""
+
+    try:
+        value = st.secrets.get(name, "")
+    except Exception:
+        value = ""
+    if not value:
+        value = os.environ.get(name, "")
+    return str(value or "").strip()
+
+
+def _ask_provider():
+    """Return the optional Groq provider, reading the key without ever exposing it.
+
+    Streamlit secrets are the deployment path; environment variables are the
+    local fallback. Missing or malformed configuration means no provider, never
+    a silent switch to another service. The provider is created once per
+    session so typing in the chat does not open a new client on every rerun.
+    """
+
+    provider = st.session_state.get("ask_provider")
+    if provider is not None:
+        return provider
+    key = _ask_setting("GROQ_API_KEY")
+    if not key:
+        return None
+    try:
+        provider = get_configured_provider(
+            key,
+            environ={"GROQ_MODEL": _ask_setting("GROQ_MODEL")},
+        )
+    except Exception:
+        return None
+    if provider is not None:
+        st.session_state["ask_provider"] = provider
+    return provider
+
+
 def _ask_toggle_panel(open_panel: bool | None = None) -> None:
     """Show, hide or toggle the in-screen panel; the page itself never moves."""
 
@@ -2799,11 +2877,47 @@ def _ask_process(
         })
         st.session_state["ask_input"] = ""
         return
+    # Optional Groq layers. Both stay off unless the deployment sets
+    # GROQ_API_KEY. The wording layer receives only an already-grounded answer
+    # whose figures have been replaced with local tokens, and any provider
+    # failure or changed figure returns the deterministic text unchanged.
+    # The general-knowledge layer runs only when the offline core has no
+    # verified evidence: the typed question alone may then be sent (no survey
+    # figure, record or identifier), the answer is labelled as model knowledge,
+    # and any provider failure falls back to the deterministic answer.
+    provider = _ask_provider()
+    if answer.question_kind == "fallback" and provider is not None:
+        general_text, general_status = answer_general_with_status(question, provider)
+        messages.append({
+            "role": "assistant",
+            "content": general_text or answer.answer,
+            "references": () if general_text else tuple(answer.references),
+            "numeric": False,
+            "ai_status": general_status,
+            "ai_model": getattr(provider, "model", ""),
+            "general": bool(general_text),
+            "general_attempt": True,
+        })
+        st.session_state["ask_input"] = ""
+        return
+    if provider is None:
+        messages.append({
+            "role": "assistant",
+            "content": answer.answer,
+            "references": tuple(answer.references),
+            "numeric": bool(answer.numeric_verified),
+        })
+        st.session_state["ask_input"] = ""
+        return
+    refinement = refine_answer_with_status(question, answer, provider)
     messages.append({
         "role": "assistant",
-        "content": answer.answer,
-        "references": tuple(answer.references),
-        "numeric": bool(answer.numeric_verified),
+        "content": refinement.answer.answer,
+        "references": tuple(refinement.answer.references),
+        "numeric": bool(refinement.answer.numeric_verified),
+        "ai_status": refinement.status,
+        "ai_model": getattr(provider, "model", ""),
+        "redacted_figures": refinement.redacted_figures,
     })
     st.session_state["ask_input"] = ""
 
@@ -2858,6 +2972,32 @@ def _ask_render_message(message: dict[str, object]) -> None:
                         label = label[:67].rstrip() + "…"
                     parts.append(f"{reference.identifier} · {label}")
                 st.caption("Sources: " + " — ".join(parts))
+            status = message.get("ai_status")
+            if message.get("general") is True:
+                st.markdown(
+                    "<div class='ask-state'>General AI answer — drawn from general "
+                    "knowledge with a live web search when needed, <strong>not</strong> "
+                    "from this survey's verified data. Survey figures belong to the "
+                    "dashboard pages; double-check anything important before relying "
+                    "on it.</div>",
+                    unsafe_allow_html=True,
+                )
+            elif isinstance(status, str) and message.get("general_attempt") is True and status in ASK_GENERAL_STATUS:
+                st.markdown(
+                    f"<div class='ask-state'>{html.escape(ASK_GENERAL_STATUS[status])}</div>",
+                    unsafe_allow_html=True,
+                )
+            elif isinstance(status, str) and status == "reworded":
+                st.markdown(
+                    "<div class='ask-state'>AI-polished wording of the verified project answer — "
+                    "no survey figures were sent. Check important details against the sources.</div>",
+                    unsafe_allow_html=True,
+                )
+            elif isinstance(status, str) and status in ASK_AI_STATUS:
+                st.markdown(
+                    f"<div class='ask-state'>{html.escape(ASK_AI_STATUS[status])}</div>",
+                    unsafe_allow_html=True,
+                )
             if message.get("numeric"):
                 st.markdown("<div class='ask-state'>Figures computed live from the loaded survey "
                             "records with the survey's household weight at the applied lens.</div>",
@@ -2871,13 +3011,19 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             "Insight Assistant",
             key="ask_launch",
             icon=":material/forum:",
-            help="Open the local InsightRwanda evidence assistant.",
+            help="Open the InsightRwanda Assistant. Project questions use verified evidence; "
+                 "general questions are answered by AI when enabled for the deployment.",
             on_click=_ask_toggle_panel,
         )
     if not st.session_state.get("ask_open", False):
         return
 
-    badge = "Verified project evidence · answers stay local"
+    provider = _ask_provider()
+    badge = (
+        "Verified project evidence · answers stay local"
+        if provider is None else
+        "Verified project evidence · general AI answers active"
+    )
 
     with st.container(key="ask_panel"):
         st.markdown(
@@ -2898,7 +3044,11 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
             args=(False,),
         )
         st.markdown(f"<div class='ask-badge'>{html.escape(badge)}</div>", unsafe_allow_html=True)
-        st.caption("Questions are answered from the project's verified evidence only.")
+        if provider is None:
+            st.caption(
+                "General AI answers are not enabled for this panel. Questions about the "
+                "project still use verified evidence."
+            )
 
         pending = st.session_state.pop("ask_pending", None)
         if pending is not None:
@@ -2914,8 +3064,9 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
                 st.markdown(
                     "<div class='ask-empty'><div class='ask-empty-title'>Ask anything</div>"
                     "<div class='ask-empty-copy'>Answers about the evidence come from this "
-                    "project's approved definitions and loaded survey records. Unsupported "
-                    "questions are clearly marked as unavailable.</div></div>",
+                    "project's approved definitions and loaded survey records. Any other "
+                    "question is answered from general knowledge — with a live web search when "
+                    "available — and is labelled as such.</div></div>",
                     unsafe_allow_html=True,
                 )
 
@@ -2930,7 +3081,7 @@ def ask_assistant_widget(df: pd.DataFrame, profile: SourceProfile, checks: list[
         st.text_input(
             "Your question",
             key="ask_input",
-            placeholder="Ask about the project...",
+            placeholder="Ask about the project — or anything else...",
             max_chars=MAX_QUESTION_LENGTH,
             label_visibility="collapsed",
             on_change=_ask_queue,

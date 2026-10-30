@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from streamlit.testing.v1 import AppTest
+
+import research.assistant_llm as assistant_llm
 
 APP_FILE = str(Path(__file__).resolve().parents[1] / "app.py")
 TIMEOUT_SECONDS = 180
@@ -13,6 +16,14 @@ class AssistantPanelUiTests(unittest.TestCase):
     """Drive the assistant the way a user does, on the same screen."""
 
     def setUp(self) -> None:
+        # UI tests stay fully local: never read a developer's Groq key or make
+        # a network call. The general-knowledge path itself is covered with
+        # stub providers in tests/test_assistant_llm.py.
+        provider_patch = mock.patch.object(
+            assistant_llm, "get_configured_provider", return_value=None
+        )
+        provider_patch.start()
+        self.addCleanup(provider_patch.stop)
         self.at = AppTest.from_file(APP_FILE, default_timeout=TIMEOUT_SECONDS)
         self.at.run()
         self.assert_no_exception()
@@ -53,15 +64,15 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.assertEqual(len([b for b in self.at.button if b.key == "ask_close"]), 1)
         self.assertEqual(
             [element.placeholder for element in self.at.text_input],
-            ["Ask about the project..."],
+            ["Ask about the project — or anything else..."],
         )
 
         rendered = self.markdown_text()
         self.assertIn("InsightRwanda Assistant", rendered)
-        self.assertIn("Ask about Rwanda's financial inclusion and poverty insights.", rendered)
+        self.assertIn("Ask about Rwanda's financial inclusion and poverty insights", rendered)
         self.assertIn("answers stay local", rendered)
         self.assertIn("Ask anything", rendered)
-        self.assertIn("Unsupported questions are clearly marked as unavailable", rendered)
+        self.assertIn("Any other question is answered from general knowledge", rendered)
         self.assertEqual(
             [button.key for button in self.at.button if button.key.startswith("ask_example_")],
             [],
@@ -124,7 +135,7 @@ class AssistantPanelUiTests(unittest.TestCase):
         self.open_panel()
         rendered = self.markdown_text() + " " + self.caption_text()
         # End-user language only: no developer setup words in the visible panel.
-        self.assertIn("Questions are answered from the project's verified evidence only", rendered)
+        self.assertIn("General AI answers are not enabled for this panel", rendered)
         self.assertIn("Do not enter personal or household-level details", rendered)
         self.assertNotIn("not an official NISR conclusion", rendered)
         for developer_word in ("API key", "administrator", "secrets or the environment"):

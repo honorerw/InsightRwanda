@@ -5,4 +5,5 @@ plotly>=5.18
 pillow>=10.0
 scikit-learn>=1.4
 pyreadstat>=1.1
+groq>=1.7,<2
 websockets>=12.0

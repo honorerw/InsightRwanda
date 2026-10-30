@@ -144,6 +144,18 @@ class RoutingTests(AssistantUnitTestBase):
                 self.assertEqual(answer.question_kind, "fallback")
                 self.assertFalse(answer.grounded)
 
+    def test_greetings_get_a_welcome_not_the_honest_fallback(self):
+        for question in ("hi", "Hi!", "hello", "hey there", "good morning"):
+            with self.subTest(question=question):
+                answer = self.ask(question)
+                self.assertEqual(answer.question_kind, "greeting")
+                self.assertNotIn("won't improvise", answer.answer)
+                self.assertIn("FI-02", answer.answer)
+
+    def test_greeting_plus_a_real_question_still_answers_the_question(self):
+        answer = self.ask("hi, what does FI-02 mean?")
+        self.assertEqual(answer.question_kind, "explain_indicator")
+
     def test_indicator_id_is_resolved_from_free_text_and_ids(self):
         self.assertEqual(resolve_indicator("Explain FI-03 briefly"), "FI-03")
         self.assertEqual(resolve_indicator("what does mobile money mean"), "FI-02")
